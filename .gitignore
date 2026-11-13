@@ -1,0 +1,27 @@
+# Local runtimes and credentials
+.venv/
+venv/
+node_modules/
+runtime.local.json
+.env
+.env.*
+!.env.example
+
+# Python and operating-system caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+Thumbs.db
+
+# Working batches and machine-specific installation evidence
+/work/
+/outputs/
+/install-receipt.json
+/installation-receipt.json
+/preview/
+
+# Editor files
+.idea/
+.vscode/
+*.swp

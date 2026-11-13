@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "fixed": {
+    "生境": "溪边树林",
+    "馆名": "中国科学院动物研究所",
+    "单位代码": "2111C0002",
+    "标本属性": "普通",
+    "保藏方式": "3.液浸标本",
+    "保藏介质": "95%乙醇",
+    "保藏状况": "完整"
+  },
+  "leave_blank": ["序列号", "Id"],
+  "collection_number_equals_specimen_number": true,
+  "collection_method": {"literal_marker": "灯诱", "when_present": "灯诱", "otherwise": "扫网"},
+  "province_codes": {"北京市": "BJ", "天津市": "TJ", "河北省": "HEB", "河南省": "HEN", "山西省": "SX"},
+  "grid_policy": "all_sheets_unique_polygon_interior_only",
+  "grid_boundary_tolerance_degrees": 1e-9,
+  "grid_review_distance_m": 200,
+  "check_county_grid": true,
+  "pending_conventions": [
+    "种名暂沿用完整双名；待目标数据库确认该列使用完整双名还是种加词。",
+    "直辖市的地级市暂沿用标签层级：未写则留空；待目标数据库确认是否重复填写直辖市名。"
+  ]
+}
