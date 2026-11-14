@@ -119,6 +119,25 @@ def build_review(data, main_paths):
     for number in range(7, len(validation_rows) + 7):
         validations.cell(number, 5).fill = PINK
         validations.cell(number, 10).fill = YELLOW
+    correction_data = data.get('label_correction_review', {})
+    correction_rows = correction_data.get('rows', [])
+    if correction_rows:
+        corrections = workbook.create_sheet('标签纠错')
+        setup(corrections, '模糊与破损标签纠错', correction_data['headers'], correction_data['widths'], correction_rows, 'LabelCorrections')
+        summary = data['label_correction_summary']
+        corrections['A3'] = (f'跨标签补全{summary["applied"]}处；证据不足{summary["pending"]}处；参考冲突{summary["ambiguous"]}处；'
+                              f'按规则处理{summary["rule_managed"]}处。全部保留原始读数和人工核对栏。')
+        corrections['A4'] = '补全值来自独立清晰标签；参考值冲突时留空。补全不等于人工已确认。'
+        corrections.freeze_panes = 'F7'
+        for number in range(7, len(correction_rows) + 7):
+            corrections.row_dimensions[number].height = 110
+            for column in [8, 9]:
+                corrections.cell(number, column).number_format = '0.00000000' if correction_rows[number-7][5] in ('经度', '纬度') else '@'
+            for column in [9, 14, 15]:
+                corrections.cell(number, column).fill = YELLOW
+        manual_correction = DataValidation(type='list', formula1='"已核对,需修正"', allow_blank=True)
+        corrections.add_data_validation(manual_correction)
+        manual_correction.add(f'N7:N{len(correction_rows) + 6}')
     return workbook
 
 

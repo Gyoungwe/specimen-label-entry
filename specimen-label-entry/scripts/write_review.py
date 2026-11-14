@@ -46,6 +46,16 @@ def main():
     for (field,value,expected,status),count in conflict_groups.items():
         label={'conflict':'用户规则与模板冲突','invalid':'不符合模板','unsupported':'尚未自动验证'}[status]
         lines.append(f'- {label}：{field}={value}，共 {count} 处；{expected}。原值未自动修改。')
+    corrections=data.get('label_correction_review',{}).get('rows',[])
+    if corrections:
+        summary=data['label_correction_summary']
+        lines += ['', '## 模糊与破损标签纠错','',
+                  f"跨标签补全 {summary['applied']} 处；证据不足 {summary['pending']} 处；参考标签冲突 {summary['ambiguous']} 处；按规则处理 {summary['rule_managed']} 处。均待人工核对。",'',
+                  '原始读数与标签原文保留；补全值单独记录来源。参考值不一致时留空，补全字段不作为其他记录的清晰参考。','',
+                  '| 标本号 | 字段 | 状况 | 原始读数 | 填写值 | 处理结果 | 参考来源 | 匹配依据 |',
+                  '|---|---|---|---|---|---|---|---|']
+        for row in corrections:
+            lines.append('| '+' | '.join(text(row[i]) for i in [4,5,6,7,8,9,10,11])+' |')
     lines += ['', '## 填写与来源约定','',
               f"- 主表先完整复制参考 Excel，再在副本中填写，保留工作表名和 {len(data['headers'])} 列表头顺序；按原始顺序逐条写入，保留来源页/图索引。",
               '- 经纬度为数值十进制度，显示 8 位小数；海拔为米；采集与鉴定日期为 Excel 日期。',

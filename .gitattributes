@@ -6,6 +6,8 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 *.svg text eol=lf
+*.txt text eol=lf
+*.swift text eol=lf
 *.xlsx binary
 *.zip binary
 *.skill binary

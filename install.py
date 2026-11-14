@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 NAME = 'specimen-label-entry'
-VERSION = '3.3.0'
+VERSION = '3.4.0'
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / NAME
 IGNORED = {'runtime.local.json', '.DS_Store'}

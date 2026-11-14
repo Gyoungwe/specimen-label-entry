@@ -9,7 +9,7 @@
 一个面向标本数字化的 Agent Skill，适配 **Codex、Claude Code 和 DeepSeek Harness**。
 
 [![Tests](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml/badge.svg)](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml)
-![Version](https://img.shields.io/badge/version-3.3.0-4b7054?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.4.0-4b7054?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Workflow](https://img.shields.io/badge/workflow-human_review_required-c6a258?style=flat-square)
 
@@ -24,7 +24,7 @@
 单枚、四枚、十二枚或更多标本都使用同一套流程。数量多时分区识别，最后按馆藏号检查遗漏和重复。
 
 > **核心约定：先完整复制参考 Excel，再在副本中填写。**
-> 保留原图与原像素裁切结果；看不清的内容留空，待核对事项单独列出。
+> 保留原图与原像素裁切结果；模糊、破损字段可引用经核验的清晰标签补全，无依据或有冲突时留空。全部补全保留来源并待人工核对。
 
 ## 快速开始
 
@@ -81,12 +81,13 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 按实际馆藏号分组，每组保留标本、编号、采集和鉴定标签。
 如果共用一个比例尺，裁取后透明叠加到各组安全空白处，保留原像素比例。
 先复制参考 Excel，再在副本里填写；按经纬度匹配网格。
-最后交付主表、分组图和人工核对清单，看不清的字段留空。
+先标记模糊或破损字段，对照同一采集事件的清晰标签补全并保留来源。
+最后交付主表、分组图、标签纠错表和人工核对清单；无法可靠补全的字段留空。
 ```
 
 ### 3. 核对结果
 
-交付物包括 **主表、人工核对 Excel、核对说明、原像素分组图、带比例尺图和结构化 JSON**。重点检查馆藏号对应关系、标签小字、坐标、日期、鉴定信息和所有提示项。
+交付物包括 **主表、人工核对 Excel、核对说明、原像素分组图、带比例尺图和结构化 JSON**。出现模糊或破损字段时，核对工作簿增加 **“标签纠错”** 页。重点检查馆藏号对应关系、标签小字、补全来源、坐标、日期和鉴定信息。
 
 **模型需要实际看图能力，或配置可用的视觉/OCR 工具。** 安装 skill 本身不会为文本模型增加视觉输入。
 
@@ -94,9 +95,9 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 
 | 文件 | 用途 |
 | --- | --- |
-| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.3.0.skill) | 完整技能与资源 |
-| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.3.0-install.zip) | 解压后运行 `install.py` |
-| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.3.0-claude.zip) | 在 Customize / Skills 导入并启用 |
+| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.4.0.skill) | 完整技能与资源 |
+| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.4.0-install.zip) | 解压后运行 `install.py` |
+| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.4.0-claude.zip) | 在 Customize / Skills 导入并启用 |
 | [SHA-256 校验值](downloads/SHA256SUMS) | 校验下载文件 |
 
 > Claude Code 的本地安装与 Claude 桌面端/Cowork 的账号导入是两个入口。桌面端导入后，仍需在实际执行环境中检查依赖和看图能力。[查看适配说明](specimen-label-entry/references/host-adaptation.md)。
@@ -107,7 +108,7 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 flowchart LR
     A["照片 / PDF"] --> B["按馆藏号关联资料"]
     B --> C["原像素裁切<br/>共享比例尺去底叠加"]
-    C --> D["逐组看图<br/>标签转录与复核"]
+    C --> D["逐组看图<br/>质量判读与跨标签纠错"]
     D --> E["应用规则<br/>多边形网格匹配"]
     E --> F["复制参考 Excel<br/>在副本中填写"]
     F --> G["读回验证<br/>人工核对清单"]
@@ -128,11 +129,43 @@ flowchart LR
 | **一枚标本一组资料** | 关联形态图、编号、采集标签、鉴定标签与比例尺，裁后逐图检查 |
 | **共享比例尺** | 裁取一次、去掉纸底；以原像素大小放入安全空白处，空白不足时延展接近原图底色的背景 |
 | **证据保留** | 原图哈希、裁切框、原像素图、透明尺蒙版及合成位置均可追溯 |
+| **模糊与破损标签纠错** | 对照同一采集事件的独立清晰标签补全共享字段，记录原始读数、补全值、匹配依据与来源 |
 | **网格号匹配** | 依据四顶点多边形判断包含关系；边界、多解和未覆盖点保持留空 |
 | **模板副本填写** | 先完整复制并检查 SHA-256，再写入；保留表头、工作表与原生数据验证 |
 | **容量与分册** | 从模板验证范围计算容量；附带模板每册 249 条，超出后自动分册 |
 | **人工核对** | 明示缺项、近边界、模板冲突及未支持校验；人工结果栏初始为空 |
 | **可选展示副本** | 抠图与调色另存，不替换原始证据图；共享尺的像素复制不等同于物理标定 |
+
+### v3.4：用清晰标签补全模糊或破损字段
+
+先放大标签，逐字段标记 **清晰 / 模糊 / 破损 / 缺失**。如果目标标签与清晰参考的地点、日期等信息能够核验为同一采集事件，就可补全共享采集字段。
+
+| 目标原始读数 | 清晰参考 | 处理结果 |
+| --- | --- | --- |
+| 经度 `114.28??` | 同事件标签为 `114.28345446` | 填入参考值，保留原读数与来源 |
+| 海拔数字缺损 | 同事件清晰标签为 `325 m` | 补全为 `325`，列入人工核对 |
+| 多张合格参考给出不同值 | 参考值互相冲突 | 留空并列出候选，不按多数票选择 |
+| 馆藏号或鉴定信息不清 | 其他个体的编号或物种信息 | 保留待核对，不跨个体套用 |
+
+这是[合成格式示例](examples/label-corrections.json)，不是实际模糊照片的识别结果。模型负责看图和质量判读，脚本负责核验结构化证据。一个补全值不能继续充当下一条记录的清晰来源；原标签文字与证据图均保持不变。[查看纠错规则](specimen-label-entry/references/label-corrections.md)。
+
+![合成示例的标签纠错页：并列显示原始读数、填写值和待核对状态](docs/assets/correction-review.png)
+
+*合成示例的 Excel 纠错页局部；完整表中还包含参考来源、匹配依据与人工核对栏。*
+
+<details>
+<summary><b>运行纠错示例</b></summary>
+
+```bash
+python3 specimen-label-entry/scripts/run.py label_corrections.py \
+  examples/label-corrections.json \
+  --out work/corrected-records.json \
+  --report work/corrections.json
+```
+
+编译器也会自动执行该步骤。补全坐标后重新匹配网格；主表备注记录参考来源，核对工作簿的“标签纠错”页保存原始读数、填写值、匹配依据和留空的人工核对栏。完全缺少锚点时，仅在用户明确确认共享采集事件后使用指定参考组。
+
+</details>
 
 ### 三个宿主，共用一套规则
 
@@ -165,7 +198,7 @@ Python 后端只修改主表副本中的目标工作表和样式，其他 XLSX �
 
 ## 验证情况
 
-v3.3 的本机发布检查包括 **49 项图像、网格与写表测试 + 5 项安装、备份和回滚测试**。
+v3.4 包含 **74 项图像、纠错、网格与写表测试 + 5 项安装、备份和回滚测试**。其中 25 项专项检查覆盖字段补全、参考冲突、禁止跨个体套用、用户已确认信息保留、原文保留、断开补全传播链和 Excel 纠错来源读回。
 
 | 验证范围 | 结果 |
 | --- | --- |
@@ -174,6 +207,7 @@ v3.3 的本机发布检查包括 **49 项图像、网格与写表测试 + 5 项�
 | 十二枚样例写表 | 三个安装副本的 Python 后端分别核对 768 个单元格，保留 15 条模板验证 |
 | 宿主发现 | Codex 技能列表、Claude Code 命令目录、DeepSeek 本地 provider 检查通过 |
 | 文件保真 | 原图、裁切像素、参考表复制哈希和未修改 XLSX 部件分别检查 |
+| 标签纠错 | 保留原值和来源，疑似字段不直接填入；有冲突时留空，读取纠错表可发现来源被修改 |
 
 这些结果验证了脚本和宿主适配，**不代表三个模型已独立完成识图，也不代表人工核对已经完成**。数量测试中的 37/128 组不是大量真实标本的识别准确率评测。[查看完整验证范围](docs/validation.md)。
 
@@ -199,6 +233,7 @@ Windows 激活环境可使用 `.venv\Scripts\Activate.ps1`。测试使用隔离�
 - [技能入口与完整执行约定](specimen-label-entry/SKILL.md)
 - [多标本照片、裁切与共享比例尺](specimen-label-entry/references/multi-specimen-photos.md)
 - [中间记录、网格与模板校验](specimen-label-entry/references/record-format.md)
+- [模糊与破损标签纠错](specimen-label-entry/references/label-corrections.md)
 - [Codex / Claude / DeepSeek Harness 适配](specimen-label-entry/references/host-adaptation.md)
 - [安装参数与适配设计](安装与适配说明.md)
 - [发布验证范围](docs/validation.md)
@@ -219,7 +254,9 @@ specimen-label-entry/
 │   ├── scripts/               # 裁切、叠尺、计算、写表与测试
 │   └── requirements.txt
 ├── tests/                     # 安装与回滚测试
-├── downloads/                 # 可导入与可安装的 v3.3 包
+├── downloads/                 # 可导入与可安装的版本包
+├── examples/                  # 合成纠错示例
+├── tools/                     # 校验清单与导出工具
 └── docs/                      # 项目视觉与验证说明
 ```
 

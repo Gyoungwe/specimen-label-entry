@@ -116,7 +116,7 @@ function setup(sheet,title,headers,widths,rows) {
     sheet.getRangeByIndexes(6,0,rows.length,headers.length).values=rows.map(row => row.map(safeText));
     sheet.getRangeByIndexes(6,0,rows.length,headers.length).format.verticalAlignment='center';
     const lastColumn=String.fromCharCode(64+headers.length);
-    sheet.tables.add(`A6:${lastColumn}${rows.length+6}`,true,sheet.name==='逐条核对'?'SpecimenReview':'TemplateReview');
+    sheet.tables.add(`A6:${lastColumn}${rows.length+6}`,true,sheet.name==='逐条核对'?'SpecimenReview':sheet.name==='标签纠错'?'LabelCorrections':'TemplateReview');
     sheet.getRangeByIndexes(6,0,rows.length,headers.length).format.fill='#FFFFFF';
   }
   sheet.freezePanes.freezeRows(6);
@@ -174,10 +174,28 @@ if (validationRows.length) {
   validationSheet.getRangeByIndexes(6,4,validationRows.length,1).format.fill=pink;
   validationSheet.getRangeByIndexes(6,9,validationRows.length,1).format.fill=yellow;
 }
+const correctionData=data.label_correction_review;
+if (correctionData?.rows?.length) {
+  const corrections=review.worksheets.add('标签纠错');
+  setup(corrections,'模糊与破损标签纠错',correctionData.headers,correctionData.widths,correctionData.rows);
+  const c=data.label_correction_summary;
+  corrections.getRange('A3').values=[[`跨标签补全${c.applied}处；证据不足${c.pending}处；参考冲突${c.ambiguous}处；按规则处理${c.rule_managed}处。全部待人工核对。`]];
+  corrections.getRange('A4').values=[['补全值来自独立清晰标签；参考值冲突时留空。补全不等于人工已确认。']];
+  corrections.getRangeByIndexes(6,0,correctionData.rows.length,correctionData.headers.length).format.rowHeight=110;
+  corrections.getRangeByIndexes(6,0,correctionData.rows.length,correctionData.headers.length).format.wrapText=true;
+  corrections.getRangeByIndexes(6,7,correctionData.rows.length,2).setNumberFormat('@');
+  correctionData.rows.forEach((row,index) => {
+    if (['经度','纬度'].includes(row[5])) corrections.getRangeByIndexes(index+6,7,1,2).setNumberFormat('0.00000000');
+  });
+  corrections.getRangeByIndexes(6,8,correctionData.rows.length,1).format.fill=yellow;
+  corrections.getRangeByIndexes(6,13,correctionData.rows.length,2).format.fill=yellow;
+  corrections.getRangeByIndexes(6,13,correctionData.rows.length,1).dataValidation={rule:{type:'list',values:['已核对','需修正']}};
+}
 review.recalculate();
 await preview(review,'逐条核对','review-source','A1:F10');
 await preview(review,'逐条核对','review-issues','H6:O10');
 await preview(review,'模板校验','validation','A1:F11');
+if (correctionData?.rows?.length) await preview(review,'标签纠错','label-corrections','E6:M9');
 await fs.mkdir(path.dirname(reviewOutput),{recursive:true});
 await (await SpreadsheetFile.exportXlsx(review)).save(reviewOutput);
 if (sha256(await fs.readFile(template)) !== templateSha256) throw new Error('Original template changed');

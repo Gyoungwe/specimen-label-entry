@@ -1,4 +1,4 @@
 interface:
   display_name: "标本标签识别入库"
-  short_description: "按实际数量和馆藏号拆图，透明叠加共享比例尺，识别标签并在参考 Excel 副本填写"
-  default_prompt: "使用 $specimen-label-entry 识别本图实际数量的标本，按馆藏号逐组核对；共享比例尺去掉纸片底色后自然叠加，保护标本和标签，复制参考 Excel 后填写并输出核对清单。"
+  short_description: "按馆藏号拆图，参考清晰标签纠错，叠加比例尺并填写参考 Excel 副本"
+  default_prompt: "使用 $specimen-label-entry 按馆藏号分组；标记模糊或破损字段，对照同采集事件的清晰标签补全并保留来源，叠加共享比例尺，复制参考 Excel 后填写并输出纠错与核对清单。"

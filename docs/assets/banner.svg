@@ -36,7 +36,7 @@
       <text x="533" y="291">EXCEL</text>
     </g>
     <text x="70" y="405" font-size="12" fill="#b6c9be" letter-spacing="1">CODEX  /  CLAUDE  /  DEEPSEEK HARNESS</text>
-    <text x="1369" y="405" font-size="12" text-anchor="end" fill="#b6c9be" letter-spacing="1.5">v3.3.0</text>
+    <text x="1369" y="405" font-size="12" text-anchor="end" fill="#b6c9be" letter-spacing="1.5">v3.4.0</text>
   </g>
   <g transform="translate(899 43) rotate(-5 167 142)" filter="url(#shadow)">
     <rect width="330" height="277" rx="12" fill="url(#paper)"/>

@@ -1,0 +1,29 @@
+{
+  "batch_notes": ["合成纠错示例，用于演示字段补全与证据记录；不是实际标本观测。"],
+  "sources": {"demo": {"name": "synthetic-example.jpg", "page_count": 1, "sha256": "illustrative-example-not-a-real-image"}},
+  "records": [
+    {
+      "record_id": "target",
+      "source": "demo",
+      "page": 1,
+      "visually_checked": true,
+      "cross_label_reviewed": true,
+      "identification_label_present": false,
+      "collection_label_text": "示例采集点A，2026-06-28，经度114.28??，纬度38.22001159，海拔破损",
+      "label_quality": {"collection": "damaged", "catalogue": "clear"},
+      "field_quality": {"国家": "clear", "省": "clear", "具体地点": "clear", "采集日期": "clear", "纬度": "clear", "经度": "unclear", "海拔": "damaged"},
+      "issues": ["示例：经度后四位模糊，海拔数字缺损。"],
+      "values": {"标本号": "DEMO-002", "国家": "中国", "省": "河北省", "具体地点": "示例采集点A", "采集日期": "2026-06-28", "经度": "114.28??", "纬度": 38.22001159, "海拔": null}
+    },
+    {
+      "record_id": "reference",
+      "source": "demo",
+      "page": 1,
+      "visually_checked": true,
+      "identification_label_present": false,
+      "collection_label_text": "中国，河北省，示例采集点A，2026-06-28，114.28345446 E，38.22001159 N，325 m",
+      "label_quality": {"collection": "clear", "catalogue": "clear"},
+      "values": {"标本号": "DEMO-001", "国家": "中国", "省": "河北省", "具体地点": "示例采集点A", "采集日期": "2026-06-28", "经度": 114.28345446, "纬度": 38.22001159, "海拔": 325}
+    }
+  ]
+}

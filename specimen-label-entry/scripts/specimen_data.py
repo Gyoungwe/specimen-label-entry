@@ -11,6 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 from template_checks import read_contract, check_values, summarize, plan_parts
+from label_corrections import repair_batch, correction_message, review_table, collection_text_acceptable
 
 NS = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 RID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
@@ -165,6 +166,7 @@ def compile_batch(batch, template, grid_file, rules):
         raise ValueError("Expected unique contiguous headers in row 1")
     if len(sheet['rows']) > 1:
         raise ValueError("The target template sheet contains data; choose an empty template or agree on an append plan")
+    batch, correction_report = repair_batch(batch, rules, headers)
     contract=read_contract(template,target,len(headers))
     capacity=contract['max_records_per_file']
     tables={s['sheet']:s['rows'] for s in template_sheets}
@@ -201,9 +203,9 @@ def compile_batch(batch, template, grid_file, rules):
             values["采集号"] = sid
         method = rules["collection_method"]
         raw = record.get("collection_label_text")
-        if not isinstance(raw, str) or not raw.strip():
+        if not collection_text_acceptable(record):
             raise ValueError(f"Page {page}: collection_label_text is required")
-        values["采集方式"] = method["when_present"] if method["literal_marker"] in raw else method["otherwise"]
+        values["采集方式"] = method["when_present"] if method["literal_marker"] in (raw or '') else method["otherwise"]
         if values.get("省") in rules["province_codes"]:
             values["省代码"] = rules["province_codes"][values["省"]]
         grid = match_grid(values.get("经度"), values.get("纬度"), grids,
@@ -214,6 +216,8 @@ def compile_batch(batch, template, grid_file, rules):
         def flag(kind,field,message):
             issues.append(message)
             flags.append({'kind':kind,'field':field,'message':message})
+        for item in record.get('label_corrections', []):
+            flag('label_correction' if item['status'] == 'applied' else 'label_quality', item['field'], correction_message(item))
         if not sid:
             flag('missing','标本号',"标本号缺失/待核对")
         if grid["status"] != "matched":
@@ -253,6 +257,11 @@ def compile_batch(batch, template, grid_file, rules):
         values["备注"] = "；".join(filter(None, [values.get("备注"), provenance] + issues))
         matrix.append([values.get(h) for h in headers])
         audit.append({"source": record["source"], "page": page, "specimen": sid,
+                      "record_id":record.get('record_id'),"label_quality":record.get('label_quality',{}),
+                      "field_quality":record.get('field_quality',{}),"observed_values":record.get('observed_values'),
+                      "collection_label_text":record.get('collection_label_text'),
+                      "identification_label_text":record.get('identification_label_text'),
+                      "label_corrections":record.get('label_corrections',[]),
                       "group_id":record.get('group_id'),"image_provenance":record.get('image_provenance'),
                       "part":part,"excel_row":excel_row,"flags":flags,
                       "identification_label_present": record.get("identification_label_present"),
@@ -276,7 +285,9 @@ def compile_batch(batch, template, grid_file, rules):
             "batch_notes": batch.get('batch_notes', []),
             "rules_applied": rules,
             "grid_sheets": list(dict.fromkeys(source['sheet'] for grid in grids for source in grid['sources'])),
-            "record_count": len(matrix), "unique_grids": len(grids)}
+            "record_count": len(matrix), "unique_grids": len(grids),
+            "label_correction_summary":correction_report['summary'],
+            "label_correction_review":review_table(audit, sources)}
 
 
 def main():

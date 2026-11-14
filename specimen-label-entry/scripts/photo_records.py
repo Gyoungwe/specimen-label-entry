@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path, PurePosixPath
 from photo_groups import verify
+from label_corrections import collection_text_acceptable
 
 
 def join_records(manifest, transcription, image_prefix='原像素分组',composition=None):
@@ -35,13 +36,13 @@ def join_records(manifest, transcription, image_prefix='原像素分组',composi
         if record.get('identification_label_present') is not group['identification_label_present']:
             raise ValueError(f'{sid}: determination-label presence differs from crop manifest')
         raw=record.get('collection_label_text')
-        if not isinstance(raw,str) or not raw.strip():
+        if not collection_text_acceptable(record):
             raise ValueError(f'{sid}: transcribe this group collection label')
         values['标本号']=sid
         # Relative image references stay usable when the delivered batch is moved.
         values['图像']=str(PurePosixPath(image_prefix)/(sid+'.png'))
         item={k:v for k,v in record.items() if k not in ('specimen_number','source','page','values')}
-        item.update({'source':'photo1','page':1,'group_id':sid,'values':values,
+        item.update({'source':'photo1','page':1,'group_id':sid,'record_id':record.get('record_id',sid),'values':values,
                      'image_provenance':{'original':manifest['source']['path'],
                        'source_sha256':manifest['source']['sha256'],'group_box':group['group_box'],
                        'group_image':group['path'],'components':group['components']},
@@ -56,6 +57,7 @@ def join_records(manifest, transcription, image_prefix='原像素分组',composi
     return {'sheet':transcription.get('sheet','biaobenku'),
             'sources':{'photo1':{**manifest['source'],'kind':'image','page_count':1}},
             'records':result,'batch_notes':transcription.get('batch_notes',[]),
+            'shared_collection_groups':transcription.get('shared_collection_groups',[]),
             'supplemental_sources':transcription.get('supplemental_sources',[])}
 
 

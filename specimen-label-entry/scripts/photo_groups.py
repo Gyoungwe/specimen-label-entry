@@ -144,7 +144,7 @@ def split(source,plan_path,out,padding=12):
     out.mkdir(parents=True)
     details=out/'components'
     details.mkdir()
-    manifest={'schema_version':3,'skill_version':'3.3.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
+    manifest={'schema_version':3,'skill_version':'3.4.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
                'display_size':list(image.size),'exif_orientation':orientation},'coordinate_space':'normalized_0_1000',
                'processing':'EXIF orientation, integer rectangular crop, lossless PNG; no resampling or colour correction',
                'human_review_pending':True,'groups':[]}

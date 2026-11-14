@@ -7,6 +7,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from specimen_data import read_xlsx
 from template_checks import check_values, summarize
+from label_corrections import review_table
 
 
 def part_path(base,index,count):
@@ -73,7 +74,10 @@ def verify(data,output,review):
     if actual_status!=expected_status:
         errors.append('导出后的模板检查逐项结果与编译前不一致')
     review_book=load_workbook(review)
-    if review_book.sheetnames!=['逐条核对','模板校验']:
+    correction_data=review_table(data['audit'],data['sources'])
+    correction_rows=correction_data['rows']
+    expected_sheets=['逐条核对','模板校验']+(['标签纠错'] if correction_rows else [])
+    if review_book.sheetnames!=expected_sheets:
         errors.append('核对清单缺少要求的工作表')
     else:
         sheet=review_book['逐条核对']
@@ -94,13 +98,31 @@ def verify(data,output,review):
         for row,check in enumerate(problems,7):
             if [validation.cell(row,c).value for c in (1,2,3,7)]!=[check['part'],check['cell'],check['field'],check['specimen']]:
                 errors.append(f'模板校验第{row}行定位不一致')
+        if correction_rows:
+            correction_sheet=review_book['标签纠错']
+            if correction_sheet.max_row!=len(correction_rows)+6:
+                errors.append('标签纠错明细数量不一致')
+            if [correction_sheet.cell(6,col).value for col in range(1,16)]!=correction_data['headers']:
+                errors.append('标签纠错表头改变')
+            for row,expected in enumerate(correction_rows,7):
+                for column,value in enumerate(expected,1):
+                    cell=correction_sheet.cell(row,column)
+                    actual=cell.value
+                    if isinstance(value,str) and actual=="'"+value and value[:1] in '=+@-':
+                        actual=value
+                    if actual!=value or cell.data_type=='f':
+                        errors.append(f'标签纠错{cell.coordinate}与原始读数、填写值或来源证据不一致')
+    if data.get('label_correction_review',correction_data)!=correction_data:
+        errors.append('编译的标签纠错明细与逐条证据不一致')
     return {'structure_and_value_checks_passed':not errors,'errors':errors,'record_count':data['record_count'],
             'main_workbooks':len(data['parts']),'compared_cells':checked_cells,
             'native_validation_rules_preserved_per_main_file':len(expected_signature),
             'template_validation':actual_summary,
             'near_edge_records':sum(any(f['kind']=='near_edge' for f in r['flags']) for r in data['audit']),
             'missing_identification_records':sum(any(f['kind']=='identification' for f in r['flags']) for r in data['audit']),
-            'unmatched_grids':sum(r['grid']['status']!='matched' for r in data['audit'])}
+            'unmatched_grids':sum(r['grid']['status']!='matched' for r in data['audit']),
+            'label_correction_rows':len(correction_rows),
+            'label_correction_summary':data.get('label_correction_summary',{})}
 
 
 def main():
