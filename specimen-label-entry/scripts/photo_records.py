@@ -52,6 +52,10 @@ def join_records(manifest, transcription, image_prefix='原像素分组',composi
                 'source_scale':composition['shared_scale'],'scale_factor':1,
                 'style':composition.get('style','footer'),'placement':composed[sid].get('placement'),
                 'scale_cutout':composition.get('scale_cutout'),
+                **({'cleanup_manifest':composition['cleanup_manifest'],
+                    'cleanup_manifest_sha256':composition['cleanup_manifest_sha256'],
+                    'cleaned_base_path':composed[sid].get('cleaned_base_path')}
+                   if composition.get('cleanup_manifest') else {}),
                 'measurement_status':composition['measurement_status']}
         result.append(item)
     return {'sheet':transcription.get('sheet','biaobenku'),

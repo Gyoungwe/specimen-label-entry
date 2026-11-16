@@ -83,7 +83,7 @@ class InstallationTests(unittest.TestCase):
         source = self.home / 'source'
         source.mkdir()
         (source / 'SKILL.md').write_text('modified')
-        (self.home / 'release-manifest.json').write_text(json.dumps({'version': '3.4.0', 'files': {}}))
+        (self.home / 'release-manifest.json').write_text(json.dumps({'version': installer.VERSION, 'files': {}}))
         with patch.object(installer, 'ROOT', self.home), patch.object(installer, 'SOURCE', source):
             with self.assertRaisesRegex(ValueError, 'checksums'):
                 installer.verify_source()

@@ -2,9 +2,10 @@
 from collections import deque
 import numpy as np
 from PIL import Image,ImageFilter
+from precision_masks import validate_mask_plan,paper_background
 
 
-def extract_ink(scale):
+def extract_ink_legacy(scale):
     rgba=scale.convert('RGBA')
     gray=np.asarray(scale.convert('L'),dtype=np.float32)
     visible=np.asarray(rgba.getchannel('A'))>0
@@ -39,6 +40,43 @@ def extract_ink(scale):
     return asset,{'method':'paper-luminance alpha with dark-connected soft edges',
         'background_luma':background,'source_size':list(scale.size),'ink_box':list(bounds),
         'asset_size':list(asset.size),'scale_factor':1,'human_review_pending':True}
+
+
+def extract_ink(scale,mask_plan=None,source_sha256=None,algorithm_version=2):
+    """Retain photographed ink, optionally constrained by a reviewed source mask.
+
+    Version 1 is kept byte-identical for archived composition manifests.
+    Polygons use the uncropped ruler's native pixels, never preview coordinates.
+    """
+    asset,meta=extract_ink_legacy(scale)
+    if algorithm_version==1:
+        if mask_plan is not None:raise ValueError('Legacy extraction does not support precision masks')
+        return asset,meta
+    if algorithm_version!=2:raise ValueError('Unknown scale extraction algorithm version')
+    full_alpha=Image.new('L',scale.size,0)
+    full_alpha.paste(asset.getchannel('A'),tuple(meta['ink_box'][:2]))
+    original=np.asarray(full_alpha)
+    alpha=original.copy()
+    if mask_plan is not None:
+        if source_sha256 is None:raise ValueError('Precision scale masks require the source SHA-256')
+        masks=validate_mask_plan(mask_plan,scale,source_sha256)
+        if not mask_plan.get('include_polygons') and not mask_plan.get('exclude_polygons'):
+            raise ValueError('Scale mask must specify reviewed inclusion or exclusion polygons')
+        protected=np.asarray(masks['protected_polygons'])>0
+        if mask_plan.get('include_polygons'):
+            alpha[(np.asarray(masks['include_polygons'])==0)&~protected]=0
+        alpha[(np.asarray(masks['exclude_polygons'])>0)&~protected]=0
+    bounds=Image.fromarray(alpha).getbbox()
+    if bounds is None or np.count_nonzero(alpha)<20:
+        raise ValueError('Precision mask removed the ruler; inspect all digits, units and ticks')
+    result=scale.convert('RGBA')
+    result.putalpha(Image.fromarray(alpha))
+    result=result.crop(bounds)
+    meta.update({'algorithm_version':2,'precision_mask':mask_plan,
+        'removed_ink_pixels':int(np.count_nonzero((original>0)&(alpha==0))),
+        'ink_box':list(bounds),'asset_size':list(result.size),
+        'retained_source_rgb_unchanged':True})
+    return result,meta
 
 
 def protected_boxes(group,target,size,margin=8):
@@ -83,7 +121,7 @@ def quiet_position(base,asset,forbidden,margin=12):
     return best[1] if best else None
 
 
-def extend_background(base,asset,margin=32):
+def extend_background_legacy(base,asset,margin=32):
     width=max(base.width,asset.width+2*margin)
     height=base.height+asset.height+2*margin
     # Estimate the paper from bright edge pixels, discarding dark label lines.
@@ -110,6 +148,49 @@ def extend_background(base,asset,margin=32):
             [width-margin-asset.width,base.height+margin,width-margin,base.height+margin+asset.height])
 
 
+def blank_edge_samples(base):
+    """Prefer bright, low-contrast native paper patches over dark edge fragments."""
+    gray=np.asarray(base.convert('L'),dtype=np.float64)
+    edge=min(48,max(4,min(base.size)//4))
+    xs=sorted(set([0,base.width-edge,*range(0,base.width-edge+1,edge)]))
+    ys=sorted(set([0,base.height-edge,*range(0,base.height-edge+1,edge)]))
+    candidates=set((x,y) for x in xs for y in [0,base.height-edge])
+    candidates.update((x,y) for x in [0,base.width-edge] for y in ys)
+    light=float(np.percentile(gray,85));ranked=[]
+    for x,y in candidates:
+        patch=gray[y:y+edge,x:x+edge]
+        if patch.size<16:continue
+        if np.mean(patch<max(25,light-35))>.01:continue
+        spread=float(np.percentile(patch,90)-np.percentile(patch,10))
+        ranked.append(((spread,abs(float(np.median(patch))-light)),[x,y,x+edge,y+edge]))
+    ranked.sort(key=lambda item:(item[0],item[1]))
+    return [box for _,box in ranked[:6]]
+
+
+def extend_background(base,asset,margin=32,version=2):
+    if version==1:return extend_background_legacy(base,asset,margin)
+    if version!=2:raise ValueError('Unknown composition background version')
+    width=max(base.width,asset.width+2*margin);height=base.height+asset.height+2*margin
+    base_x=(width-base.width)//2
+    samples=blank_edge_samples(base)
+    template=Image.new(base.mode,(width,height),'white');template.paste(base,(base_x,0))
+    if samples:
+        shifted=[[x0+base_x,y0,x1+base_x,y1] for x0,y0,x1,y1 in samples]
+        background=np.uint8(np.rint(paper_background(template,shifted)))
+        canvas=Image.fromarray(background).convert(base.mode)
+    else:
+        # No usable blank patch: use a uniform bright-source estimate, never
+        # stretch a clipped label line or appendage through the extension.
+        rgba=np.asarray(base.convert('RGBA'))
+        gray=np.asarray(base.convert('L'))
+        bright=rgba[gray>=np.percentile(gray,85)]
+        colour=tuple(int(v) for v in np.median(bright,axis=0))
+        canvas=Image.new('RGBA',(width,height),colour).convert(base.mode)
+    canvas.paste(base,(base_x,0))
+    return (canvas,[base_x,0,base_x+base.width,base.height],
+            [width-margin-asset.width,base.height+margin,width-margin,base.height+margin+asset.height])
+
+
 def apply_asset(base,asset,box):
     result=base.copy()
     region=base.crop(box).convert('RGBA')
@@ -118,7 +199,7 @@ def apply_asset(base,asset,box):
     return result
 
 
-def compose_overlay(base,asset,group,target,shared):
+def compose_overlay(base,asset,group,target,shared,background_version=2):
     outer=group['group_box'];box=shared['box']
     if target=='group' and outer[0]<=box[0] and outer[1]<=box[1] and box[2]<=outer[2] and box[3]<=outer[3]:
         local=[box[0]-outer[0],box[1]-outer[1],box[2]-outer[0],box[3]-outer[1]]
@@ -128,7 +209,7 @@ def compose_overlay(base,asset,group,target,shared):
     if placement is not None:
         canvas=apply_asset(base,asset,placement)
         return canvas,[0,0,base.width,base.height],placement,'transparent_overlay'
-    canvas,base_box,placement=extend_background(base,asset)
+    canvas,base_box,placement=extend_background(base,asset,version=background_version)
     return apply_asset(canvas,asset,placement),base_box,placement,'matched_background_extension'
 
 
