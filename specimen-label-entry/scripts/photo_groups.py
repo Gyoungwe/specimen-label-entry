@@ -37,7 +37,7 @@ def intersection(a,b):
     return max(0,min(a[2],b[2])-max(a[0],b[0]))*max(0,min(a[3],b[3])-max(a[1],b[1]))
 
 
-def validate_plan(plan,image):
+def validate_plan(plan,image,direct=False):
     if plan.get('coordinate_space')!='normalized_0_1000':
         raise ValueError('Plan must explicitly use normalized_0_1000 coordinates')
     groups=plan.get('groups',[])
@@ -66,15 +66,17 @@ def validate_plan(plan,image):
             raise ValueError('Use shared_scale once at photo level; set each group scale to null')
         if set(components)-set(ROLES):
             raise ValueError('Unknown component role')
-        if components.get('catalogue') is None or components.get('specimen') is None:
+        if not direct and (components.get('catalogue') is None or components.get('specimen') is None):
             raise ValueError(f'{sid}: specimen and catalogue boxes are required')
         for box in components.values():
             if box is not None:
                 pixel_box(box,*image.size)
                 if shared is not None and intersection(pixel_box(shared['box'],*image.size),pixel_box(box,*image.size)):
                     raise ValueError(f'Shared scale box overlaps {sid}; inspect the scale crop')
-        if bool(components.get('identification'))!=bool(group.get('identification_label_present')):
+        if (not direct or components.get('identification') is not None) and bool(components.get('identification'))!=bool(group.get('identification_label_present')):
             raise ValueError(f'{sid}: identification presence and component must agree')
+        if direct and not isinstance(group.get('identification_label_present'),bool):
+            raise ValueError('Direct extraction needs a visually checked identification-label presence flag')
         if group.get('group_box') is not None:
             outer=pixel_box(group['group_box'],*image.size)
             for box in components.values():
@@ -122,7 +124,28 @@ def prepare(source,work):
     print(json.dumps(metadata,ensure_ascii=False))
 
 
-def split(source,plan_path,out,padding=12):
+def overlap_warnings(groups,regions,width,height):
+    conflicts=[]
+    for i,region in enumerate(regions):
+        for j,other in enumerate(groups):
+            if i==j:continue
+            if not any(other['components'].values()) and intersection(region,regions[j]):
+                conflicts.append({'group':groups[i]['specimen_number'],'other':other['specimen_number'],'role':'group'})
+            for role,box in other['components'].items():
+                if box is not None and intersection(region,pixel_box(box,width,height)):
+                    conflicts.append({'group':groups[i]['specimen_number'],'other':other['specimen_number'],'role':role})
+    return conflicts
+
+
+def validate_direct_review(review,groups):
+    if (not isinstance(review,dict) or review.get('visually_checked') is not True or
+        not isinstance(review.get('reason'),str) or not review['reason'].strip()):
+        raise ValueError('Direct extraction needs a visually reviewed source and a reason for the fallback')
+    if any(g.get('group_box') is None or g.get('pairing_reviewed') is not True or g.get('id_verified') is not True for g in groups):
+        raise ValueError('Direct extraction needs an explicit group_box and reviewed pairing for each catalogue ID')
+
+
+def split(source,plan_path,out,padding=12,direct=False):
     if out.exists():
         raise ValueError('Choose a new output directory; existing crops are not overwritten')
     image,orientation=open_source(source)
@@ -132,22 +155,26 @@ def split(source,plan_path,out,padding=12):
         raise ValueError('Source SHA-256 mismatch; re-inspect this photograph')
     if plan.get('display_size')!=list(image.size):
         raise ValueError('Display dimensions differ; coordinates may refer to a resized screenshot')
-    groups=validate_plan(plan,image)
+    if direct:
+        for group in plan.get('groups',[]):group.setdefault('components',{})
+    groups=validate_plan(plan,image,direct=direct)
+    if direct:validate_direct_review(plan.get('direct_review'),groups)
     regions=[group_box(g,*image.size,padding) for g in groups]
-    for i,region in enumerate(regions):
-        for j,other in enumerate(groups):
-            if i==j:
-                continue
-            for role,box in other['components'].items():
-                if box is not None and intersection(region,pixel_box(box,*image.size)):
-                    raise ValueError(f"{groups[i]['specimen_number']} crop intersects {other['specimen_number']}:{role}; revise the boxes/padding")
+    conflicts=overlap_warnings(groups,regions,*image.size)
+    if conflicts and not direct:
+        first=conflicts[0]
+        raise ValueError(f"{first['group']} crop intersects {first['other']}:{first['role']}; revise the boxes/padding")
     out.mkdir(parents=True)
     details=out/'components'
     details.mkdir()
-    manifest={'schema_version':3,'skill_version':'3.5.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
+    manifest={'schema_version':3,'skill_version':'3.6.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
                'display_size':list(image.size),'exif_orientation':orientation},'coordinate_space':'normalized_0_1000',
                'processing':'EXIF orientation, integer rectangular crop, lossless PNG; no resampling or colour correction',
                'human_review_pending':True,'groups':[]}
+    if direct:
+        manifest.update({'schema_version':4,'crop_method':'reviewed_direct',
+            'direct_review':plan['direct_review'],'overlap_warnings':conflicts,
+            'processing':'visually located direct integer crop; no frames, resampling or colour correction; overlaps retained for review'})
     if plan.get('shared_scale') is not None:
         scale=plan['shared_scale']
         actual=pixel_box(scale['box'],*image.size)
@@ -184,7 +211,7 @@ def split(source,plan_path,out,padding=12):
     overview.thumbnail((2400,2400))
     draw=ImageDraw.Draw(overview)
     font=ImageFont.load_default(size=22)
-    for group,box in zip(groups,regions):
+    for group,box in ([] if direct else zip(groups,regions)):
         scaled=[round(box[0]*overview.width/image.width),round(box[1]*overview.height/image.height),
                 round(box[2]*overview.width/image.width),round(box[3]*overview.height/image.height)]
         draw.rectangle(scaled,outline='#D33E26',width=4)
@@ -200,6 +227,22 @@ def verify(manifest_path):
     if digest(source)!=manifest['source']['sha256']:
         raise ValueError('Original photograph no longer matches the source fingerprint')
     image,_=open_source(source)
+    if list(image.size)!=manifest['source']['display_size']:raise ValueError('Source coordinate dimensions differ')
+    ids=[g['specimen_number'] for g in manifest['groups']]
+    if not ids or len(ids)!=len(set(ids)):raise ValueError('Manifest needs distinct catalogue IDs')
+    if manifest.get('crop_method')=='reviewed_direct':
+        validate_direct_review(manifest.get('direct_review'),manifest['groups'])
+        # Stored component boxes are already native pixels, unlike plan boxes.
+        native_conflicts=[]
+        for i,group in enumerate(manifest['groups']):
+            for j,other in enumerate(manifest['groups']):
+                if i==j:continue
+                if not any(other['components'].values()) and intersection(group['group_box'],other['group_box']):
+                    native_conflicts.append({'group':group['specimen_number'],'other':other['specimen_number'],'role':'group'})
+                for role,entry in other['components'].items():
+                    if entry is not None and intersection(group['group_box'],entry['box']):
+                        native_conflicts.append({'group':group['specimen_number'],'other':other['specimen_number'],'role':role})
+        if manifest.get('overlap_warnings')!=native_conflicts:raise ValueError('Direct extraction overlap evidence differs')
     checked=0
     shared=manifest.get('shared_scale')
     if shared is not None:
@@ -211,6 +254,10 @@ def verify(manifest_path):
     for group in manifest['groups']:
         entries=[{'box':group['group_box'],'path':group['path']}]+[v for v in group['components'].values() if v is not None]
         for entry in entries:
+            box=entry['box']
+            if (len(box)!=4 or any(isinstance(v,bool) or not isinstance(v,int) for v in box) or
+                not (0<=box[0]<box[2]<=image.width and 0<=box[1]<box[3]<=image.height)):
+                raise ValueError('Crop box must use in-bounds native integer coordinates')
             expected=image.crop(entry['box'])
             with Image.open(entry['path']) as actual:
                 if actual.mode!=expected.mode or actual.size!=expected.size or actual.tobytes()!=expected.tobytes():
@@ -230,6 +277,7 @@ def main():
     subs=parser.add_subparsers(dest='command',required=True)
     prep=subs.add_parser('prepare'); prep.add_argument('source',type=Path); prep.add_argument('--work',type=Path,required=True)
     export=subs.add_parser('split'); export.add_argument('source',type=Path); export.add_argument('plan',type=Path); export.add_argument('--out',type=Path,required=True); export.add_argument('--padding',type=int,default=12)
+    direct=subs.add_parser('direct');direct.add_argument('source',type=Path);direct.add_argument('plan',type=Path);direct.add_argument('--out',type=Path,required=True)
     check=subs.add_parser('verify'); check.add_argument('manifest',type=Path)
     args=parser.parse_args()
     if args.command=='prepare': prepare(args.source,args.work)
@@ -237,6 +285,7 @@ def main():
         if not 0<=args.padding<=100:
             raise ValueError('padding must be between 0 and 100 normalized units')
         split(args.source,args.plan,args.out,args.padding)
+    elif args.command=='direct':split(args.source,args.plan,args.out,padding=0,direct=True)
     else: print(json.dumps(verify(args.manifest),ensure_ascii=False))
 
 

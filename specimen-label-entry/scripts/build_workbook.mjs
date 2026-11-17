@@ -179,7 +179,7 @@ if (correctionData?.rows?.length) {
   const corrections=review.worksheets.add('标签纠错');
   setup(corrections,'模糊与破损标签纠错',correctionData.headers,correctionData.widths,correctionData.rows);
   const c=data.label_correction_summary;
-  corrections.getRange('A3').values=[[`跨标签补全${c.applied}处；证据不足${c.pending}处；参考冲突${c.ambiguous}处；按规则处理${c.rule_managed}处。全部待人工核对。`]];
+  corrections.getRange('A3').values=[[`跨标签补全${c.applied}处；证据不足${c.pending}处；参考冲突${c.ambiguous}处；按规则处理${c.rule_managed}处；区间值留空${c.non_scalar??0}处。全部待人工核对。`]];
   corrections.getRange('A4').values=[['补全值来自独立清晰标签；参考值冲突时留空。补全不等于人工已确认。']];
   corrections.getRangeByIndexes(6,0,correctionData.rows.length,correctionData.headers.length).format.rowHeight=110;
   corrections.getRangeByIndexes(6,0,correctionData.rows.length,correctionData.headers.length).format.wrapText=true;

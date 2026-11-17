@@ -9,7 +9,7 @@
 一个面向标本数字化的 Agent Skill，适配 **Codex、Claude Code 和 DeepSeek Harness**。
 
 [![Tests](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml/badge.svg)](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml)
-![Version](https://img.shields.io/badge/version-3.5.0-4b7054?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.6.0-4b7054?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Workflow](https://img.shields.io/badge/workflow-human_review_required-c6a258?style=flat-square)
 
@@ -96,9 +96,9 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 
 | 文件 | 用途 |
 | --- | --- |
-| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.5.0.skill) | 完整技能与资源 |
-| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.5.0-install.zip) | 解压后运行 `install.py` |
-| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.5.0-claude.zip) | 在 Customize / Skills 导入并启用 |
+| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0.skill) | 完整技能与资源 |
+| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0-install.zip) | 解压后运行 `install.py` |
+| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0-claude.zip) | 在 Customize / Skills 导入并启用 |
 | [SHA-256 校验值](downloads/SHA256SUMS) | 校验下载文件 |
 
 > Claude Code 的本地安装与 Claude 桌面端/Cowork 的账号导入是两个入口。桌面端导入后，仍需在实际执行环境中检查依赖和看图能力。[查看适配说明](specimen-label-entry/references/host-adaptation.md)。
@@ -130,6 +130,9 @@ flowchart LR
 | **一枚标本一组资料** | 关联形态图、编号、采集标签、鉴定标签与比例尺，裁后逐图检查 |
 | **共享比例尺** | 裁取一次、去掉纸底；以原像素大小放入安全空白处，空白不足时延展接近原图底色的背景 |
 | **精细裁边与去底** | 用原尺寸多边形排除纸边、异物和残字，保护触角、足、标签与真实刻度；另存清理副本 |
+| **从原片重试** | 外扩原图采集卡并生成 2× 预览；仍失败时看整张/半张/条带；密集布局支持不画组件框的直接截取 |
+| **交付命名与重拍核对** | 正式图片去掉 `IOZ(E)`、加 `-1`，馆藏号不变；重复号、文件名冲突和缺图会被检出 |
+| **区间值留空** | 海拔、日期等原文为区间时，单值列留空，保留原文与说明，不取端点或均值 |
 | **证据保留** | 原图哈希、裁切框、原像素图、透明尺蒙版及合成位置均可追溯 |
 | **模糊与破损标签纠错** | 对照同一采集事件的独立清晰标签补全共享字段，记录原始读数、补全值、匹配依据与来源 |
 | **网格号匹配** | 依据四顶点多边形判断包含关系；边界、多解和未覆盖点保持留空 |
@@ -137,6 +140,18 @@ flowchart LR
 | **容量与分册** | 从模板验证范围计算容量；附带模板每册 249 条，超出后自动分册 |
 | **人工核对** | 明示缺项、近边界、模板冲突及未支持校验；人工结果栏初始为空 |
 | **可选展示副本** | 抠图与调色另存，不替换原始证据图；共享尺的像素复制不等同于物理标定 |
+
+### v3.6：先回原片，再决定缺失
+
+“读不清”可能来自裁框截掉了最后一行，“缺标本”也可能只是 OCR 漏号。新增按实际重试经历整理的[十步流程](specimen-label-entry/references/batch-retries.md)：
+
+1. **回原图扩裁**：纠错后仍有未读字段，四周外扩 60 个归一化单位，保留原尺寸图并另存 2× 阅读图。
+2. **直接看原片**：仍未读出或整组漏掉时，打开整张、左右半张或上下条带；倒置标签可另存转向阅读图。
+3. **直接截取回退**：拥挤布局反复发生组件框碰撞时，按原片位置直接截取完整一组，保留哈希、坐标、配对与重叠记录。
+
+多照片先建立 EXIF / OCR 候选清单，重拍按馆藏号逐枚选图。交付图使用 `图像/0000001-1.png`，表格标本号仍为 `IOZ(E)0000001`。放大图和转向阅读图不会冒充原像素证据；同片出现不代表同一次采集。
+
+区间值会保留原文并留空单值列，进入“标签纠错”页和 `标签不清晰明细.md`。同时合并真实项目发现的空值校验修复：纠错页的 `None` 与空字符串等价，有值、空格、零值及公式继续严格核对。
 
 ### v3.5：更干净的裁边与比例尺
 
@@ -213,7 +228,7 @@ Python 后端只修改主表副本中的目标工作表和样式，其他 XLSX �
 
 ## 验证情况
 
-v3.5 包含 **92 项图像、纠错、网格与写表测试 + 5 项安装、备份和回滚测试**。新增 18 项检查覆盖精细蒙版、触角保护、局部坐标与来源校验、背景颜色稳定性、避免拉伸黑边、清理后叠尺和旧清单兼容。此前的 25 项标签纠错检查继续保留。
+v3.6 包含 **116 项核心测试 + 5 项安装、备份和回滚测试**。本轮新增 24 项检查，覆盖原片扩裁、分区与转向、OCR 前缀变体、直接截取、交付命名、区间值隔离及空值校验。之前的标签纠错、精细裁边、比例尺、网格与模板副本检查继续保留。
 
 | 验证范围 | 结果 |
 | --- | --- |
@@ -223,6 +238,7 @@ v3.5 包含 **92 项图像、纠错、网格与写表测试 + 5 项安装、备�
 | 十二枚样例写表 | 三个安装副本的 Python 后端分别核对 768 个单元格，保留 15 条模板验证 |
 | 宿主发现 | Codex 技能列表、Claude Code 命令目录、DeepSeek 本地 provider 检查通过 |
 | 文件保真 | 原图、裁切像素、参考表复制哈希和未修改 XLSX 部件分别检查 |
+| 既有三批表格只读回归 | 315 条、20,160 个单元格；复现 4 处 K/L 列空值误报，修复后通过，原交付文件未改写 |
 | 标签纠错 | 保留原值和来源，疑似字段不直接填入；有冲突时留空，读取纠错表可发现来源被修改 |
 
 这些结果验证了脚本和宿主适配，**不代表三个模型已独立完成识图，也不代表人工核对已经完成**。数量测试中的 37/128 组不是大量真实标本的识别准确率评测。[查看完整验证范围](docs/validation.md)。
@@ -249,6 +265,7 @@ Windows 激活环境可使用 `.venv\Scripts\Activate.ps1`。测试使用隔离�
 - [技能入口与完整执行约定](specimen-label-entry/SKILL.md)
 - [多标本照片、裁切与共享比例尺](specimen-label-entry/references/multi-specimen-photos.md)
 - [精细裁边、触角保护与比例尺去底](specimen-label-entry/references/precision-cleanup.md)
+- [十步流程、原片重试与直接截取](specimen-label-entry/references/batch-retries.md)
 - [中间记录、网格与模板校验](specimen-label-entry/references/record-format.md)
 - [模糊与破损标签纠错](specimen-label-entry/references/label-corrections.md)
 - [Codex / Claude / DeepSeek Harness 适配](specimen-label-entry/references/host-adaptation.md)

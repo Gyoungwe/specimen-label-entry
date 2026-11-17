@@ -13,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import unicodedata
+from label_intervals import observations as interval_observations
 
 QUALITIES = {'clear', 'unclear', 'damaged', 'missing'}
 QUALITY_LABELS = {'clear': '清晰', 'unclear': '模糊', 'damaged': '破损', 'missing': '缺失'}
@@ -22,7 +23,8 @@ ROLE_FIELDS = {'catalogue': {'标本号'}, 'collection': SHARED_FIELDS | {'采�
                                   '属名', '种名', '亚种名', '作者', '年代', '鉴定人', '鉴定日期'}}
 ANCHORS = [('具体地点', '采集日期'), ('经度', '纬度', '采集日期')]
 STATUS_LABELS = {'applied': '跨标签补全，待核对', 'pending': '证据不足，留空待核对',
-                 'ambiguous': '参考标签冲突，留空待核对', 'rule_managed': '按规则或用户确认处理，待核对'}
+                 'ambiguous': '参考标签冲突，留空待核对', 'rule_managed': '按规则或用户确认处理，待核对',
+                 'non_scalar': '标签为区间，单值留空待核对'}
 REVIEW_HEADERS = ['来源文件', '来源页/图', '输出分册', 'Excel行', '标本号', '字段', '标签状况',
                   '原始读数', '填写值', '处理结果', '参考来源', '匹配依据', '需核对事项', '人工核对结果', '人工备注']
 REVIEW_WIDTHS = [32, 12, 11, 10, 23, 16, 12, 30, 30, 32, 85, 65, 70, 18, 45]
@@ -57,7 +59,7 @@ def normalized(value):
 
 
 def clear(record, field):
-    return record.get('field_quality', {}).get(field) == 'clear' and valid_value(field, record['observed_values'].get(field))
+    return field not in record.get('interval_observations',{}) and record.get('field_quality', {}).get(field) == 'clear' and valid_value(field, record['observed_values'].get(field))
 
 
 def reviewed_reference(record):
@@ -97,6 +99,8 @@ def prepare_records(batch, headers=None):
         if set(labels) - {'catalogue', 'collection', 'identification', 'scale'}:
             raise ValueError('Unknown label role in label_quality')
         quality = dict(quality)
+        for field in record.get('interval_observations',{}):
+            quality.setdefault(field,'clear')
         for role, state in labels.items():
             for field in sorted(ROLE_FIELDS[role]):
                 if field in values and field not in quality:
@@ -113,7 +117,7 @@ def prepare_records(batch, headers=None):
         record['values'] = deepcopy(values)
         record['label_corrections'] = []
         for field, state in quality.items():
-            if state != 'clear':
+            if state != 'clear' or field in record.get('interval_observations',{}):
                 record['values'][field] = None
         if record.get('source') not in batch.get('sources', {}):
             raise ValueError('Correction record has an unknown source')
@@ -162,7 +166,10 @@ def collection_text_acceptable(record):
 def repair_batch(batch, rules=None, headers=None):
     """Return a repaired copy and report; never mutate the input or raw text."""
     result = deepcopy(batch)
-    active = any(r.get('field_quality') or r.get('label_quality') for r in result.get('records', [])) or bool(result.get('shared_collection_groups'))
+    for record in result.get('records',[]):
+        intervals=interval_observations(record)
+        if intervals:record['interval_observations']=intervals
+    active = any(r.get('field_quality') or r.get('label_quality') or r.get('interval_observations') for r in result.get('records', [])) or bool(result.get('shared_collection_groups'))
     summary = {'enabled': active, 'applied': 0, 'pending': 0, 'ambiguous': 0, 'rule_managed': 0, 'records_affected': 0}
     if not active:
         return result, {'summary': summary, 'items': []}
@@ -189,14 +196,19 @@ def repair_batch(batch, rules=None, headers=None):
                     potential.setdefault(reference_id, []).append({'type': 'user_confirmed_group', 'id': group['id'],
                                                                   'fields': group['fields'], 'statement': group['evidence']['statement']})
         for field, quality in record.get('field_quality', {}).items():
-            if quality == 'clear':
+            interval=record.get('interval_observations',{}).get(field)
+            if quality == 'clear' and not interval:
                 continue
             item = {'record_id': record['record_id'], 'source': record['source'], 'page': record['page'],
                     'group_id': record.get('group_id'), 'specimen': record['observed_values'].get('标本号'),
                     'field': field, 'quality': quality, 'original_value': deepcopy(record['observed_values'].get(field)),
                     'value': None, 'status': 'pending', 'reason_code': 'no_matching_reference',
                     'reason': '没有通过共享采集事件核验的清晰参考字段', 'candidates': [], 'donors': [], 'donor_count': 0}
-            if field in rule_fields:
+            if interval:
+                item.update(status='non_scalar',reason_code='interval_not_scalar',original_value=interval['raw_text'],
+                            observed_candidate=deepcopy(record['observed_values'].get(field)),
+                            reason='标签原文为区间，单值列留空；不取端点、均值或借用其他标签的单值')
+            elif field in rule_fields:
                 item.update(status='rule_managed', reason_code='batch_rule', reason='按本批固定或派生规则处理；原标签不清晰仍需核对')
             elif field in ROLE_FIELDS['identification'] and (record.get('identification_evidence') or {}).get('type') == 'user_confirmation' and str((record.get('identification_evidence') or {}).get('statement') or '').strip() and item['original_value'] is not None:
                 item.update(status='rule_managed', reason_code='user_identification_confirmation', value=item['original_value'],
@@ -249,6 +261,8 @@ def repair_batch(batch, rules=None, headers=None):
 
 def correction_message(item):
     field = item['field'] or item.get('label_role', '标签')
+    if item['status']=='non_scalar':
+        return f'标签纠错：{field}原文“{item["original_value"]}”为区间；单值留空，不取端点或均值'
     if item['status'] == 'applied':
         donors = '；'.join(f'{d["source_name"]} 第{d["page"]}页/图 {d.get("group_id") or d.get("specimen") or d["record_id"]}' for d in item['donors'])
         return f'标签纠错：{field}原读数“{display(item["original_value"])}”→“{display(item["value"])}”；参考{donors}；待人工核对'

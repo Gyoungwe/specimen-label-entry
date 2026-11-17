@@ -96,6 +96,8 @@ def add(manifest_path,out,targets=('group','specimen'),style='overlay',scale_mas
     if not shared or shared.get('visually_checked') is not True:
         raise ValueError('Manifest must contain a visually checked shared_scale from this photograph')
     groups=manifest['groups']
+    if 'specimen' in targets and any(not g['components'].get('specimen') for g in groups):
+        raise ValueError('Direct groups without specimen components support --targets group; no individual morphology crop was declared')
     if len({g['specimen_number'] for g in groups})!=len(groups):
         raise ValueError('Catalogue IDs must be unique')
     if any(g.get('pairing_reviewed') is not True for g in groups):

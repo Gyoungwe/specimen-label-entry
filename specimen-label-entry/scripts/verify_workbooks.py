@@ -19,6 +19,11 @@ def signature(sheet):
                   for v in sheet.data_validations.dataValidation)
 
 
+def blank_equivalent(value):
+    """Excel serializes an empty text cell as None; retain all nonblank values."""
+    return None if value is None or value == '' else value
+
+
 def verify(data,output,review):
     errors=[]
     template=load_workbook(data['template'])
@@ -110,7 +115,7 @@ def verify(data,output,review):
                     actual=cell.value
                     if isinstance(value,str) and actual=="'"+value and value[:1] in '=+@-':
                         actual=value
-                    if actual!=value or cell.data_type=='f':
+                    if blank_equivalent(actual)!=blank_equivalent(value) or cell.data_type=='f':
                         errors.append(f'标签纠错{cell.coordinate}与原始读数、填写值或来源证据不一致')
     if data.get('label_correction_review',correction_data)!=correction_data:
         errors.append('编译的标签纠错明细与逐条证据不一致')

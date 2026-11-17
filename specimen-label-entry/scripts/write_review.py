@@ -14,12 +14,32 @@ def coordinate(value):
     return '留空' if value is None else f'{value:.8f}'
 
 
+def unclear_report(data):
+    lines=['# 标签不清晰与区间值明细','','按来源照片/页逐枚列出；区间值可清晰可读，但不填入单值列。', '',
+           '| 来源照片/页 | 标本号 | 字段 | 原始读数 | 填写值 | 处理 | 重试记录 |',
+           '|---|---|---|---|---|---|---|']
+    count=0
+    from label_corrections import STATUS_LABELS
+    for record in sorted(data['audit'],key=lambda r:(data['sources'][r['source']]['name'],str(r.get('specimen') or ''),r['page'])):
+        attempts='、'.join(str(a.get('stage','')) for a in record.get('review_attempts',[])) or '未记录'
+        for item in record.get('label_corrections',[]):
+            count+=1
+            lines.append('| '+' | '.join(text(v) for v in [data['sources'][record['source']]['name']+f' 第{record["page"]}页/图',
+                record['specimen'],item['field'] or item.get('label_role'),item['original_value'],
+                record['values'].get(item['field']),STATUS_LABELS[item['status']],attempts])+' |')
+    if not count:lines+=['','当前编译记录没有标注未解决的标签质量问题或区间值；这不替代原图和覆盖检查。']
+    return '\n'.join(lines)+'\n'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('compiled',type=Path)
     parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--unclear-out',type=Path,help='Also write photo-by-photo unclear/range observations')
     args=parser.parse_args()
     data=json.loads(args.compiled.read_text())
+    if args.unclear_out and (args.unclear_out.resolve() in [args.compiled.resolve(),args.out.resolve()] or args.unclear_out.exists()):
+        raise ValueError('Choose a distinct new unclear-detail output')
     records=data['audit']
     matched=sum(r['grid']['status']=='matched' for r in records)
     missing=[r for r in records if any('未见鉴定标签' in s and '留空' in s for s in r['issues'])]
@@ -50,7 +70,7 @@ def main():
     if corrections:
         summary=data['label_correction_summary']
         lines += ['', '## 模糊与破损标签纠错','',
-                  f"跨标签补全 {summary['applied']} 处；证据不足 {summary['pending']} 处；参考标签冲突 {summary['ambiguous']} 处；按规则处理 {summary['rule_managed']} 处。均待人工核对。",'',
+                  f"跨标签补全 {summary['applied']} 处；证据不足 {summary['pending']} 处；参考标签冲突 {summary['ambiguous']} 处；按规则处理 {summary['rule_managed']} 处；区间值留空 {summary.get('non_scalar',0)} 处。均待人工核对。",'',
                   '原始读数与标签原文保留；补全值单独记录来源。参考值不一致时留空，补全字段不作为其他记录的清晰参考。','',
                   '| 标本号 | 字段 | 状况 | 原始读数 | 填写值 | 处理结果 | 参考来源 | 匹配依据 |',
                   '|---|---|---|---|---|---|---|---|']
@@ -98,6 +118,9 @@ def main():
               '默认模板、网格和规则均已随 skill 保存；有新规则或参考文件时以新提供的内容为准。', '']
     args.out.parent.mkdir(parents=True,exist_ok=True)
     args.out.write_text('\n'.join(lines))
+    if args.unclear_out:
+        args.unclear_out.parent.mkdir(parents=True,exist_ok=True)
+        args.unclear_out.write_text(unclear_report(data))
     print(args.out)
 
 

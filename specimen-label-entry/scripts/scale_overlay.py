@@ -89,7 +89,7 @@ def protected_boxes(group,target,size,margin=8):
         x0,y0,x1,y1=component['box']
         boxes.append([max(0,x0-left-margin),max(0,y0-top-margin),
                       min(size[0],x1-left+margin),min(size[1],y1-top+margin)])
-    return boxes
+    return boxes or [[0,0,size[0],size[1]]]
 
 
 def overlaps(a,b):

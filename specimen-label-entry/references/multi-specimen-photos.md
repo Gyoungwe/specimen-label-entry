@@ -4,6 +4,8 @@
 
 ## 准备原图与坐标
 
+多照片先按 [批次与重试流程](batch-retries.md) 建来源/重拍清单；未读字段和漏组按“回原图扩裁 → 直接看原片 → 必要时直接截取”复核。OCR 没读出编号或切片空白，不能据此断言原图无标本。
+
 使用含 Pillow、NumPy 的 Python。安装后通过 `python scripts/run.py HELPER.py ...` 调用安装器选择的解释器；Codex 也可通过 `load_workspace_dependencies` 定位内置运行环境。其他宿主见 [宿主适配](host-adaptation.md)。路径相对本 skill；WORK 为本批工作目录，准备和裁切分别选新目录。
 
 ```text
@@ -62,6 +64,8 @@ python scripts/photo_groups.py verify WORK/split-final/groups-manifest.json
 ```
 
 这个验证证明源文件未变、所有裁切的解码像素与源图对应区域一致；**不证明框中的内容配对正确或边缘完整**，后两项由看图记录支撑。`human_review_pending` 始终保持为真，人工核对留到用户执行。
+
+密集布局可用 `--padding 0`；反复因外框压叠失败时，按 [直接截取](batch-retries.md) 使用 `photo_groups.py direct`，无需继续画组件框。此模式仍保留来源、像素和重叠核验；不会把不完整编号条当成完整一组。
 
 裁切中出现标签残字、黑框或邻组碎片时，按 [精细裁边](precision-cleanup.md) 生成原尺寸坐标图，重新选框或使用经看图确认的排除区与形态保护区。完整组图应保留本组标签；形态图可在另存副本中清理非形态内容。跨过标签边框的触角保持完整，交叠像素保留并标注。
 
@@ -127,6 +131,8 @@ python scripts/specimen_data.py WORK/records.json --out WORK/compiled.json
 ```
 
 桥接器检查所有馆藏号各覆盖一次、图组配对已检查、鉴定标签状态一致，并写入原图指纹和框、局部图路径。`图像` 默认填 `原像素分组/馆藏号.png`；交付时建立同名相对目录。主表备注标明原图与馆藏号，便于追溯。
+
+上述桥接默认路径保留兼容；正式照片交付按批次流程再运行 `photo_delivery.py`，复制为 `图像/去前缀馆藏号-1.png` 并生成更新后的记录，表格标本号仍为完整馆藏号。共享尺和清理来源继续保留。
 
 使用共享尺时改用下列桥接命令，使 Excel 的“图像”指向带尺完整组图，同时在结构化记录保留未修改证据图和共享尺的来源。交付时将目录命名为 `带比例尺分组` 并与 Excel 放在一起。
 

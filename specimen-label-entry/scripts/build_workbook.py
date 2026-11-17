@@ -126,7 +126,7 @@ def build_review(data, main_paths):
         setup(corrections, '模糊与破损标签纠错', correction_data['headers'], correction_data['widths'], correction_rows, 'LabelCorrections')
         summary = data['label_correction_summary']
         corrections['A3'] = (f'跨标签补全{summary["applied"]}处；证据不足{summary["pending"]}处；参考冲突{summary["ambiguous"]}处；'
-                              f'按规则处理{summary["rule_managed"]}处。全部保留原始读数和人工核对栏。')
+                              f'按规则处理{summary["rule_managed"]}处；区间值留空{summary.get("non_scalar",0)}处。全部保留原始读数和人工核对栏。')
         corrections['A4'] = '补全值来自独立清晰标签；参考值冲突时留空。补全不等于人工已确认。'
         corrections.freeze_panes = 'F7'
         for number in range(7, len(correction_rows) + 7):

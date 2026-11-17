@@ -262,6 +262,8 @@ def compile_batch(batch, template, grid_file, rules):
                       "collection_label_text":record.get('collection_label_text'),
                       "identification_label_text":record.get('identification_label_text'),
                       "label_corrections":record.get('label_corrections',[]),
+                      "interval_observations":record.get('interval_observations',{}),
+                      "review_attempts":record.get('review_attempts',[]),
                       "group_id":record.get('group_id'),"image_provenance":record.get('image_provenance'),
                       "part":part,"excel_row":excel_row,"flags":flags,
                       "identification_label_present": record.get("identification_label_present"),
