@@ -9,6 +9,7 @@ import shutil
 from PIL import Image
 from photo_groups import digest,open_source
 from shared_scale import verify as verify_compositions
+from complete_photos import verify as verify_complete_photos
 
 
 def filename(sid,strip_prefix='IOZ(E)'):
@@ -21,19 +22,38 @@ def filename(sid,strip_prefix='IOZ(E)'):
 def composition_index(paths):
     result={}
     for path in paths:
-        verify_compositions(path)
         manifest=json.loads(path.read_text())
+        if manifest.get('kind')=='complete_specimen_photographs':
+            verify_complete_photos(path)
+            for entry in manifest['images']:
+                key=Path(entry['path']).resolve()
+                if key in result:raise ValueError('Repeated image path across manifests')
+                result[key]=(manifest,entry)
+            continue
+        verify_compositions(path)
         for entry in manifest['images']:
             if entry['target']=='group':
                 result[Path(entry['path']).resolve()]=(manifest,entry)
     return result
 
 
-def checked_image(record,sources,composed):
+def checked_image(record,sources,composed,require_complete=False):
     provenance=record.get('image_provenance') or {}
     source=Path(provenance.get('original') or sources[record['source']]['path'])
     expected_sha=provenance.get('source_sha256') or sources[record['source']].get('sha256')
     if not expected_sha or digest(source)!=expected_sha:raise ValueError('Delivery source photograph SHA-256 differs')
+    complete=provenance.get('complete_photo')
+    if complete:
+        path=Path(complete['path']).resolve()
+        if path not in composed:raise ValueError('Provide the visually reviewed five-part photograph manifest')
+        manifest,entry=composed[path]
+        if (manifest.get('kind')!='complete_specimen_photographs' or
+            manifest['source_sha256']!=expected_sha or Path(manifest['source']).resolve()!=source.resolve() or
+            entry['specimen_number']!=record['values']['标本号']):
+            raise ValueError('Complete photograph has the wrong catalogue/source pairing')
+        return path
+    if require_complete:
+        raise ValueError('Delivery requires the complete number paper, specimen, collection paper and both ruler views')
     image,_=open_source(source);box=provenance.get('group_box')
     if (not isinstance(box,list) or len(box)!=4 or any(isinstance(v,bool) or not isinstance(v,int) for v in box) or
         not (0<=box[0]<box[2]<=image.width and 0<=box[1]<box[3]<=image.height)):
@@ -52,7 +72,7 @@ def checked_image(record,sources,composed):
     return path
 
 
-def export(records,out,records_out,compositions=(),strip_prefix='IOZ(E)'):
+def export(records,out,records_out,compositions=(),strip_prefix='IOZ(E)',require_complete=False):
     if (out.exists() or records_out.exists() or records_out.resolve()==records.resolve() or
         records_out.suffix.lower()!='.json' or records_out.resolve()==(out/'delivery-manifest.json').resolve()):
         raise ValueError('Choose a fresh image directory and records output; retain all inputs')
@@ -62,11 +82,12 @@ def export(records,out,records_out,compositions=(),strip_prefix='IOZ(E)'):
     if not ids or len(set(ids))!=len(ids) or len(set(names))!=len(names):
         raise ValueError('Resolve repeated photographs/catalogue IDs and filename collisions before delivery')
     composed=composition_index(compositions)
-    selected=[checked_image(record,batch['sources'],composed) for record in items]
+    selected=[checked_image(record,batch['sources'],composed,require_complete) for record in items]
     result=deepcopy(batch);proof={'schema_version':1,'kind':'verified_photo_delivery','source_records':str(records.resolve()),
         'source_records_sha256':digest(records),'records':str(records_out.resolve()),
         'composition_manifests':[str(p.resolve()) for p in compositions],
         'strip_prefix':strip_prefix,'image_prefix':out.name,'images':[],'human_review_pending':True}
+    if require_complete:proof['require_complete_photos']=True
     out.mkdir(parents=True)
     for record,sid,name,source in zip(result['records'],ids,names,selected):
         destination=out/name;shutil.copyfile(source,destination)
@@ -98,7 +119,7 @@ def verify(path):
     expected_records={r['values']['标本号']:r for r in expected_batch['records']}
     for entry in proof['images']:
         sid=entry['specimen_number'];image=Path(entry['path'])
-        expected=checked_image(originals[sid],old['sources'],composed)
+        expected=checked_image(originals[sid],old['sources'],composed,proof.get('require_complete_photos',False))
         if (expected.resolve()!=Path(entry['source_path']).resolve() or digest(expected)!=entry['sha256'] or
             digest(image)!=entry['sha256'] or image.name!=filename(sid,proof['strip_prefix']) or
             by_id[sid]['values'].get('图像')!=entry['relative_path'] or
@@ -120,9 +141,10 @@ def main():
     copy=subs.add_parser('export');copy.add_argument('records',type=Path);copy.add_argument('--out',type=Path,required=True)
     copy.add_argument('--records-out',type=Path,required=True);copy.add_argument('--compositions',nargs='*',type=Path,default=[])
     copy.add_argument('--strip-prefix',default='IOZ(E)')
+    copy.add_argument('--require-complete',action='store_true',help='Require hash-bound visual reviews of all five complete image parts')
     check=subs.add_parser('verify');check.add_argument('manifest',type=Path)
     a=p.parse_args()
-    r=export(a.records,a.out,a.records_out,a.compositions,a.strip_prefix) if a.command=='export' else verify(a.manifest)
+    r=export(a.records,a.out,a.records_out,a.compositions,a.strip_prefix,a.require_complete) if a.command=='export' else verify(a.manifest)
     print(json.dumps({'command':a.command,'images':len(r['images']) if 'images' in r else r['verified_images'],
                       'catalogue_ids_unchanged':True,'human_review_pending':True},ensure_ascii=False))
 

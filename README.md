@@ -9,7 +9,7 @@
 一个面向标本数字化的 Agent Skill，适配 **Codex、Claude Code 和 DeepSeek Harness**。
 
 [![Tests](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml/badge.svg)](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml)
-![Version](https://img.shields.io/badge/version-3.6.0-4b7054?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.7.0-4b7054?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Workflow](https://img.shields.io/badge/workflow-human_review_required-c6a258?style=flat-square)
 
@@ -78,7 +78,7 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 ```text
 使用 specimen-label-entry 处理这张标本合照。
 
-按实际馆藏号分组，每组保留标本、编号、采集和鉴定标签。
+按实际馆藏号分组，逐张保留整张编号纸、完整标本及附肢、整张采集标签、原生比例尺和合成比例尺；有鉴定标签时一并保留。
 如果共用一个比例尺，裁取后透明叠加到各组安全空白处，保留原像素比例。
 检查比例尺和形态图边缘；有异物、黑边或残字时，保护细触角后另存清理副本。
 先复制参考 Excel，再在副本里填写；按经纬度匹配网格。
@@ -96,9 +96,9 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 
 | 文件 | 用途 |
 | --- | --- |
-| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0.skill) | 完整技能与资源 |
-| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0-install.zip) | 解压后运行 `install.py` |
-| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.6.0-claude.zip) | 在 Customize / Skills 导入并启用 |
+| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0.skill) | 完整技能与资源 |
+| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0-install.zip) | 解压后运行 `install.py` |
+| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0-claude.zip) | 在 Customize / Skills 导入并启用 |
 | [SHA-256 校验值](downloads/SHA256SUMS) | 校验下载文件 |
 
 > Claude Code 的本地安装与 Claude 桌面端/Cowork 的账号导入是两个入口。桌面端导入后，仍需在实际执行环境中检查依赖和看图能力。[查看适配说明](specimen-label-entry/references/host-adaptation.md)。
@@ -126,6 +126,8 @@ flowchart LR
 
 | 能力 | 处理方式 |
 | --- | --- |
+| **agent 统一入口** | 准备坐标网格、检查计划、批量构建、生成核对模板、验图与导出；JSON 状态明确区分候选和可交付 |
+| **五项完整验收** | 整张编号纸、完整标本及附肢、采集标签整纸、原生尺和合成尺逐张看图确认，检查绑定最终图哈希 |
 | **数量不固定的合照** | 根据实际馆藏号建立清单；不限定 1、4、12 枚或固定行列布局 |
 | **一枚标本一组资料** | 关联形态图、编号、采集标签、鉴定标签与比例尺，裁后逐图检查 |
 | **共享比例尺** | 裁取一次、去掉纸底；以原像素大小放入安全空白处，空白不足时延展接近原图底色的背景 |
@@ -140,6 +142,22 @@ flowchart LR
 | **容量与分册** | 从模板验证范围计算容量；附带模板每册 249 条，超出后自动分册 |
 | **人工核对** | 明示缺项、近边界、模板冲突及未支持校验；人工结果栏初始为空 |
 | **可选展示副本** | 抠图与调色另存，不替换原始证据图；共享尺的像素复制不等同于物理标定 |
+
+### v3.7：五项验收与 agent 工具入口
+
+正式图逐张核对 **编号纸、完整标本、采集标签整纸、原生尺、合成尺**。相机旋转和阅读转向使用明确的原像素坐标；长触角跨行时保留目标范围，原尺已经可见时也会另加合成尺。像素一致、文件数量正确与视觉完整性分别检查。
+
+新的统一入口让不同 agent 复用相同工具：
+
+```bash
+python scripts/run.py photo_workflow.py prepare PHOTO.JPG --out WORK/photo-01 --rotation 180
+python scripts/run.py photo_workflow.py check PHOTO.JPG WORK/photo-01/plan.json
+python scripts/run.py photo_workflow.py build PHOTO.JPG WORK/photo-01/plan.json --out WORK/candidate-01
+```
+
+`prepare` 生成原像素坐标网格和未确认计划；`build` 输出联系表、透明尺明暗预览、五项均为 false 的核对模板。agent 实际看图后执行 `review → verify → export`。多照片可使用 `batch`，失败按来源和馆藏号报告，不把半成品视为完成。[工具使用](specimen-label-entry/references/agent-tools.md) · [五项验收](specimen-label-entry/references/photo-completeness.md)。
+
+比例尺可按已复核的字、单位和刻度选择完整连通笔画，并精确排除独立固定针、纸边组件。该操作保留源 RGB 和几何尺寸；原始连续裁图仍保留。OCR 日期与海拔粘连也不会再直接变成伪海拔区间，数值仍须回原片确认。
 
 ### v3.6：先回原片，再决定缺失
 
@@ -228,7 +246,7 @@ Python 后端只修改主表副本中的目标工作表和样式，其他 XLSX �
 
 ## 验证情况
 
-v3.6 包含 **116 项核心测试 + 5 项安装、备份和回滚测试**。本轮新增 24 项检查，覆盖原片扩裁、分区与转向、OCR 前缀变体、直接截取、交付命名、区间值隔离及空值校验。之前的标签纠错、精细裁边、比例尺、网格与模板副本检查继续保留。
+v3.7 包含 **134 项核心测试 + 5 项安装、备份和回滚测试**。新增检查覆盖完整纸张与附肢保护、两种比例尺、原尺笔画选择、视觉检查与哈希绑定、EXIF/阅读坐标、批次失败报告和日期海拔粘连；之前的纠错、网格与模板副本检查继续保留。
 
 | 验证范围 | 结果 |
 | --- | --- |

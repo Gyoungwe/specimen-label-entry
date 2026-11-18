@@ -72,7 +72,8 @@ def validate_plan(plan,image,direct=False):
             if box is not None:
                 pixel_box(box,*image.size)
                 if shared is not None and intersection(pixel_box(shared['box'],*image.size),pixel_box(box,*image.size)):
-                    raise ValueError(f'Shared scale box overlaps {sid}; inspect the scale crop')
+                    if not shared.get('allow_overlap'):
+                        raise ValueError(f'Shared scale box overlaps {sid}; inspect the scale crop')
         if (not direct or components.get('identification') is not None) and bool(components.get('identification'))!=bool(group.get('identification_label_present')):
             raise ValueError(f'{sid}: identification presence and component must agree')
         if direct and not isinstance(group.get('identification_label_present'),bool):
@@ -167,7 +168,7 @@ def split(source,plan_path,out,padding=12,direct=False):
     out.mkdir(parents=True)
     details=out/'components'
     details.mkdir()
-    manifest={'schema_version':3,'skill_version':'3.6.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
+    manifest={'schema_version':3,'skill_version':'3.7.0','expected_groups':len(groups),'source':{'path':str(source.resolve()),'name':source.name,'sha256':before,
                'display_size':list(image.size),'exif_orientation':orientation},'coordinate_space':'normalized_0_1000',
                'processing':'EXIF orientation, integer rectangular crop, lossless PNG; no resampling or colour correction',
                'human_review_pending':True,'groups':[]}

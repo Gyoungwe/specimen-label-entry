@@ -79,6 +79,69 @@ def extract_ink(scale,mask_plan=None,source_sha256=None,algorithm_version=2):
     return result,meta
 
 
+def ink_reach(full, start_indices):
+    height, width = full.shape
+    support = bytearray((full > 8).tobytes()); reached = bytearray(full.size)
+    queue = deque(start_indices)
+    for i in queue: reached[i] = 1
+    while queue:
+        i = queue.popleft(); x = i % width; y = i // width
+        neighbours = []
+        if x: neighbours.append(i-1)
+        if x+1 < width: neighbours.append(i+1)
+        if y: neighbours.append(i-width)
+        if y+1 < height: neighbours.append(i+width)
+        for j in neighbours:
+            if support[j] and not reached[j]: reached[j] = 1; queue.append(j)
+    return np.frombuffer(reached, dtype=np.uint8).reshape(full.shape) > 0
+
+
+def extract_seeded_ink(scale, seed_boxes, mask_plan=None, source_sha256=None, drop_points=()):
+    """Keep complete connected ink strokes reached from reviewed numeral/tick seeds.
+
+    Seed rectangles select strokes, not crop them: a tall digit or end tick outside
+    its seed is retained in full. Separate pins, paper edges and dust drop out.
+    Use a full ruler-paper source ROI and review the result on light and dark.
+    """
+    asset, meta = extract_ink(scale, mask_plan, source_sha256)
+    full = np.zeros((scale.height, scale.width), dtype=np.uint8)
+    x0, y0, x1, y1 = meta['ink_box']
+    full[y0:y1, x0:x1] = np.asarray(asset.getchannel('A'))
+    drop_indices = []
+    for point in drop_points:
+        if (not isinstance(point, list) or len(point) != 2 or
+                any(isinstance(v, bool) or not isinstance(v, int) for v in point)):
+            raise ValueError('Ruler artifact points use native integer crop-pixel coordinates')
+        x, y = point
+        if not (0 <= x < scale.width and 0 <= y < scale.height) or full[y, x] <= 8:
+            raise ValueError('Choose a visible artifact ink pixel for connected-component exclusion')
+        drop_indices.append(y*scale.width+x)
+    if drop_indices:
+        full[ink_reach(full, drop_indices)] = 0
+    seeds = np.zeros(full.shape, dtype=bool)
+    if not isinstance(seed_boxes, list) or not seed_boxes:
+        raise ValueError('Review seed regions in the actual numerals, unit and ruler line')
+    for box in seed_boxes:
+        if (not isinstance(box, list) or len(box) != 4 or
+                any(isinstance(v, bool) or not isinstance(v, int) for v in box)):
+            raise ValueError('Ruler seeds use native integer crop-pixel rectangles')
+        a, b, c, d = box
+        if not (0 <= a < c <= scale.width and 0 <= b < d <= scale.height):
+            raise ValueError('Ruler seed lies outside the full ruler source ROI')
+        seeds[b:d, a:c] = True
+    keep = ink_reach(full, np.flatnonzero((seeds & (full > 8)).reshape(-1)).tolist())
+    alpha = np.where(keep, full, 0).astype(np.uint8)
+    bounds = Image.fromarray(alpha).getbbox()
+    if bounds is None or np.count_nonzero(alpha) < 20:
+        raise ValueError('Ruler seeds did not retain sufficient ink')
+    result = scale.convert('RGBA'); result.putalpha(Image.fromarray(alpha)); result = result.crop(bounds)
+    meta.update({'method': 'reviewed-seed connected ink; full source strokes retained',
+                 'seed_boxes': seed_boxes, 'drop_points': list(drop_points),
+                 'seed_removed_pixels': int(np.count_nonzero((full > 0) & ~keep)),
+                 'ink_box': list(bounds), 'asset_size': list(result.size), 'scale_factor': 1})
+    return result, meta
+
+
 def protected_boxes(group,target,size,margin=8):
     if target=='specimen':
         return [[0,0,size[0],size[1]]]
