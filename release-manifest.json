@@ -25,7 +25,7 @@
     "scripts/label_intervals.py": "cd02f23c766b9984af35dcb77e8315453512da375a0dbe70cbb86f065c8ee2d1",
     "scripts/ocr_macos.swift": "ba4994248fd11f58b137306dec54bf4485090d4fcfa891297ccaf6e79c91cbf1",
     "scripts/photo_binding.py": "580aba489674d625fcf62beef9197a27410150a84d13ad0f0673b5121cb4d87d",
-    "scripts/photo_delivery.py": "2b3c96b684c67662ef2dda53f13e18375fd6d2f1fcde44f4ef2c48f9b534d556",
+    "scripts/photo_delivery.py": "01c42e4dffbdc2ebf7d4cf70dc4a542fffd18ea58176bccb817e63c40c5e728c",
     "scripts/photo_groups.py": "4641373857f81bc0c53e101f201aa7ceb0bba7ec79820856d1773bde1cfddd24",
     "scripts/photo_records.py": "2d1ffc5a5fbb895e6a421c7b83085b1e670fb190775ef21cc78be534f41203fb",
     "scripts/photo_review.py": "580b43200a9bd0d40f4d60e9ef6418d121b4368e614c1684c9ca3e0f9c30e053",

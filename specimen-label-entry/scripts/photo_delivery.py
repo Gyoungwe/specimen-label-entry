@@ -53,7 +53,7 @@ def checked_image(record,sources,composed,require_complete=False):
             raise ValueError('Complete photograph has the wrong catalogue/source pairing')
         return path
     if require_complete:
-        raise ValueError('Delivery requires the complete number paper, specimen, collection paper and both ruler views')
+        raise ValueError('Delivery requires the complete number paper, specimen, collection paper and reviewed ruler policy')
     image,_=open_source(source);box=provenance.get('group_box')
     if (not isinstance(box,list) or len(box)!=4 or any(isinstance(v,bool) or not isinstance(v,int) for v in box) or
         not (0<=box[0]<box[2]<=image.width and 0<=box[1]<box[3]<=image.height)):
