@@ -9,7 +9,7 @@
 一个面向标本数字化的 Agent Skill，适配 **Codex、Claude Code 和 DeepSeek Harness**。
 
 [![Tests](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml/badge.svg)](https://github.com/Gyoungwe/specimen-label-entry/actions/workflows/tests.yml)
-![Version](https://img.shields.io/badge/version-3.7.0-4b7054?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.8.0-4b7054?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Workflow](https://img.shields.io/badge/workflow-human_review_required-c6a258?style=flat-square)
 
@@ -78,8 +78,8 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 ```text
 使用 specimen-label-entry 处理这张标本合照。
 
-按实际馆藏号分组，逐张保留整张编号纸、完整标本及附肢、整张采集标签、原生比例尺和合成比例尺；有鉴定标签时一并保留。
-如果共用一个比例尺，裁取后透明叠加到各组安全空白处，保留原像素比例。
+按实际馆藏号分组，逐张保留整张编号纸、完整标本及附肢、整张采集标签及恰好一把比例尺；有鉴定标签时一并保留。
+已有完整原生尺的组不再添加；没有原生尺的组仅叠加一把同片透明合成尺，原尺裁图另存证据。
 检查比例尺和形态图边缘；有异物、黑边或残字时，保护细触角后另存清理副本。
 先复制参考 Excel，再在副本里填写；按经纬度匹配网格。
 先标记模糊或破损字段，对照同一采集事件的清晰标签补全并保留来源。
@@ -96,9 +96,9 @@ Windows 可用 `py -3` 运行入口。PDF 渲染另需 Poppler 的 `pdftoppm`；
 
 | 文件 | 用途 |
 | --- | --- |
-| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0.skill) | 完整技能与资源 |
-| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0-install.zip) | 解压后运行 `install.py` |
-| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.7.0-claude.zip) | 在 Customize / Skills 导入并启用 |
+| [通用 `.skill`](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.8.0.skill) | 完整技能与资源 |
+| [本地多宿主安装包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.8.0-install.zip) | 解压后运行 `install.py` |
+| [Claude 桌面端 / Cowork 导入包](https://github.com/Gyoungwe/specimen-label-entry/raw/refs/heads/main/downloads/specimen-label-entry-v3.8.0-claude.zip) | 在 Customize / Skills 导入并启用 |
 | [SHA-256 校验值](downloads/SHA256SUMS) | 校验下载文件 |
 
 > Claude Code 的本地安装与 Claude 桌面端/Cowork 的账号导入是两个入口。桌面端导入后，仍需在实际执行环境中检查依赖和看图能力。[查看适配说明](specimen-label-entry/references/host-adaptation.md)。
@@ -127,7 +127,7 @@ flowchart LR
 | 能力 | 处理方式 |
 | --- | --- |
 | **agent 统一入口** | 准备坐标网格、检查计划、批量构建、生成核对模板、验图与导出；JSON 状态明确区分候选和可交付 |
-| **五项完整验收** | 整张编号纸、完整标本及附肢、采集标签整纸、原生尺和合成尺逐张看图确认，检查绑定最终图哈希 |
+| **完整性与单尺验收** | 整张编号纸、完整标本及附肢、采集标签整纸和恰好一把比例尺逐张看图确认，检查绑定最终图哈希 |
 | **数量不固定的合照** | 根据实际馆藏号建立清单；不限定 1、4、12 枚或固定行列布局 |
 | **一枚标本一组资料** | 关联形态图、编号、采集标签、鉴定标签与比例尺，裁后逐图检查 |
 | **共享比例尺** | 裁取一次、去掉纸底；以原像素大小放入安全空白处，空白不足时延展接近原图底色的背景 |
@@ -143,9 +143,9 @@ flowchart LR
 | **人工核对** | 明示缺项、近边界、模板冲突及未支持校验；人工结果栏初始为空 |
 | **可选展示副本** | 抠图与调色另存，不替换原始证据图；共享尺的像素复制不等同于物理标定 |
 
-### v3.7：五项验收与 agent 工具入口
+### v3.8：每张成品只保留一把比例尺
 
-正式图逐张核对 **编号纸、完整标本、采集标签整纸、原生尺、合成尺**。相机旋转和阅读转向使用明确的原像素坐标；长触角跨行时保留目标范围，原尺已经可见时也会另加合成尺。像素一致、文件数量正确与视觉完整性分别检查。
+正式图逐张核对 **编号纸、完整标本、采集标签整纸和恰好一把比例尺**。已有完整原生尺时不再叠尺；没有原生尺时仅加一把透明合成尺，原尺整纸另存证据。部分原尺或邻组原尺混入会被计划检查拦下。相机方向、完整纸边与长触角仍按原像素核对，不能凭双线印刷边框判定原片遮挡。
 
 新的统一入口让不同 agent 复用相同工具：
 
@@ -155,7 +155,7 @@ python scripts/run.py photo_workflow.py check PHOTO.JPG WORK/photo-01/plan.json
 python scripts/run.py photo_workflow.py build PHOTO.JPG WORK/photo-01/plan.json --out WORK/candidate-01
 ```
 
-`prepare` 生成原像素坐标网格和未确认计划；`build` 输出联系表、透明尺明暗预览、五项均为 false 的核对模板。agent 实际看图后执行 `review → verify → export`。多照片可使用 `batch`，失败按来源和馆藏号报告，不把半成品视为完成。[工具使用](specimen-label-entry/references/agent-tools.md) · [五项验收](specimen-label-entry/references/photo-completeness.md)。
+`prepare` 生成原像素坐标网格和未确认计划；`build` 输出联系表、透明尺明暗预览、四项均为 false 的核对模板。agent 实际看图后执行 `review → verify → export`。多照片可使用 `batch`，失败按来源和馆藏号报告，不把半成品视为完成。[工具使用](specimen-label-entry/references/agent-tools.md) · [完整性与单尺验收](specimen-label-entry/references/photo-completeness.md)。
 
 比例尺可按已复核的字、单位和刻度选择完整连通笔画，并精确排除独立固定针、纸边组件。该操作保留源 RGB 和几何尺寸；原始连续裁图仍保留。OCR 日期与海拔粘连也不会再直接变成伪海拔区间，数值仍须回原片确认。
 
@@ -246,7 +246,7 @@ Python 后端只修改主表副本中的目标工作表和样式，其他 XLSX �
 
 ## 验证情况
 
-v3.7 包含 **134 项核心测试 + 5 项安装、备份和回滚测试**。新增检查覆盖完整纸张与附肢保护、两种比例尺、原尺笔画选择、视觉检查与哈希绑定、EXIF/阅读坐标、批次失败报告和日期海拔粘连；之前的纠错、网格与模板副本检查继续保留。
+v3.8 包含 **145 项核心测试 + 5 项安装、备份和回滚测试**。新增 11 项检查覆盖原生尺不重复叠加、远处共享尺只显示透明笔画、部分尺与第二把原尺拦截、细触角单独保护、四项验收和旧双尺证据重放；纠错、网格与模板副本检查继续保留。
 
 | 验证范围 | 结果 |
 | --- | --- |
@@ -257,7 +257,7 @@ v3.7 包含 **134 项核心测试 + 5 项安装、备份和回滚测试**。新�
 | 宿主发现 | Codex 技能列表、Claude Code 命令目录、DeepSeek 本地 provider 检查通过 |
 | 文件保真 | 原图、裁切像素、参考表复制哈希和未修改 XLSX 部件分别检查 |
 | v3.6 既有三批只读回归 | 315 条、20,160 个单元格；复现并修复 4 处 K/L 列空值误报，保留该轮原文件 |
-| v3.7 三批原片复核与修复 | 三个 GPT-6 Luna 子代理及主代理复核 315 枚；312 张完成五项检查，3 张原片遮挡待补拍；备份后更新 630 张副本和六份表格，读回 20,160 格 |
+| 三批原片复核 | 315 枚、20,160 格读回；v3.7 初审把 3 张印刷边界误判为遮挡，已撤回该结论，按原片重裁；v3.8 改为每张成品只保留一把尺 |
 | 标签纠错 | 保留原值和来源，疑似字段不直接填入；有冲突时留空，读取纠错表可发现来源被修改 |
 
 这些结果验证了脚本和宿主适配，**不代表三个模型已独立完成识图，也不代表人工核对已经完成**。数量测试中的 37/128 组不是大量真实标本的识别准确率评测。[查看完整验证范围](docs/validation.md)。

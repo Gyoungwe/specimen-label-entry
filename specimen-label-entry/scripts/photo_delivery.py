@@ -45,7 +45,7 @@ def checked_image(record,sources,composed,require_complete=False):
     complete=provenance.get('complete_photo')
     if complete:
         path=Path(complete['path']).resolve()
-        if path not in composed:raise ValueError('Provide the visually reviewed five-part photograph manifest')
+        if path not in composed:raise ValueError('Provide the visually reviewed complete photograph manifest')
         manifest,entry=composed[path]
         if (manifest.get('kind')!='complete_specimen_photographs' or
             manifest['source_sha256']!=expected_sha or Path(manifest['source']).resolve()!=source.resolve() or
@@ -141,7 +141,7 @@ def main():
     copy=subs.add_parser('export');copy.add_argument('records',type=Path);copy.add_argument('--out',type=Path,required=True)
     copy.add_argument('--records-out',type=Path,required=True);copy.add_argument('--compositions',nargs='*',type=Path,default=[])
     copy.add_argument('--strip-prefix',default='IOZ(E)')
-    copy.add_argument('--require-complete',action='store_true',help='Require hash-bound visual reviews of all five complete image parts')
+    copy.add_argument('--require-complete',action='store_true',help='Require hash-bound visual reviews of complete subjects and the declared ruler policy')
     check=subs.add_parser('verify');check.add_argument('manifest',type=Path)
     a=p.parse_args()
     r=export(a.records,a.out,a.records_out,a.compositions,a.strip_prefix,a.require_complete) if a.command=='export' else verify(a.manifest)

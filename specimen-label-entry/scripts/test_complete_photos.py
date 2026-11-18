@@ -42,7 +42,8 @@ def fixture(root, shared=False, orientation=1, rotation=0):
                                'note': 'Full paper edges, appendage and ruler ticks checked.'}}
     plan = {'source_sha256': digest(source), 'exif_display_size': [720, 500],
             'reading_rotation': rotation, 'oriented_size': [720, 500],
-            'coordinate_space': 'oriented_native_pixels', 'expected_groups': 1, 'groups': [group]}
+            'coordinate_space': 'oriented_native_pixels', 'expected_groups': 1, 'groups': [group],
+            'ruler_policy': 'both'}  # explicit legacy fixture; new plans default to one ruler
     if shared:
         plan['native_scale'] = scale_info
     else:

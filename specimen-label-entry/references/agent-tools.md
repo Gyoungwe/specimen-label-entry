@@ -8,9 +8,9 @@
 | --- | --- | --- |
 | `prepare` | 原片、输出目录、可选阅读转向及实际编号清单 | 无框原片预览、原像素坐标网格、计划草稿；检查标志初始均为 false |
 | `check` | 原片与计划 | JSON 列出缺哪个角色、哪个馆藏号和失败原因；回原片修订 |
-| `build` | 单张原片与已复核计划 | 原像素证据、双比例尺候选图、分页联系表、尺的明暗预览和核对模板 |
+| `build` | 单张原片与已复核计划 | 原像素证据、单比例尺候选图、分页联系表、尺的明暗预览和核对模板 |
 | `batch` | 多张原片任务清单 | 每个任务独立记录结果；有失败仍处理其余任务，整批不会被误报为已完成 |
-| `review` | 候选清单与实际看图后的记录 | 五项检查绑定最终图片哈希；执行者写 agent 名称，不冒充用户确认 |
+| `review` | 候选清单与实际看图后的记录 | 四项检查绑定最终图片哈希；执行者写 agent 名称，不冒充用户确认 |
 | `verify` | 已核对清单 | 重放原片裁切、清理和叠尺，验证检查状态及图片字节 |
 | `export` | 记录 JSON 与所有完整清单 | 强制完整验收后按馆藏号命名复制；冲突、缺项和未确认检查会失败 |
 
@@ -20,14 +20,14 @@
 python scripts/run.py photo_workflow.py prepare PHOTO.JPG --out WORK/photo-01 --rotation 180
 ```
 
-先打开返回 JSON 中的 `overview` 和 `coordinate_grid`，确认方向。网格数字是 EXIF 转正并按 `--rotation` 转向后的原图像素，不能用预览像素代替。读取实际编号后编辑生成的 `plan.json`；参数 `--ids` 只方便放入已读清单，不会自动确认编号或配对。组件、原生尺、整纸和附肢范围按 [五项完整验收](photo-completeness.md) 标注。
+先打开返回 JSON 中的 `overview` 和 `coordinate_grid`，确认方向。网格数字是 EXIF 转正并按 `--rotation` 转向后的原图像素，不能用预览像素代替。读取实际编号后编辑生成的 `plan.json`；参数 `--ids` 只方便放入已读清单，不会自动确认编号或配对。组件、原生尺、整纸和附肢范围按 [完整性与单尺验收](photo-completeness.md) 标注。
 
 ```text
 python scripts/run.py photo_workflow.py check PHOTO.JPG WORK/photo-01/plan.json
 python scripts/run.py photo_workflow.py build PHOTO.JPG WORK/photo-01/plan.json --out WORK/candidate-01
 ```
 
-`ready_to_build` 仅代表源计划通过检查。`build` 返回 `needs_final_visual_review`、联系表路径、每枚尺的明暗预览及 `reviews-template.json`。模板中的五项全部为 false；逐图对照原片确认后另存 `reviews.json`，再执行：
+`ready_to_build` 仅代表源计划通过检查。`build` 返回 `needs_final_visual_review`、联系表路径、每枚尺的明暗预览及 `reviews-template.json`。模板中的四项全部为 false；逐图对照原片确认后另存 `reviews.json`，再执行：
 
 ```text
 python scripts/run.py photo_workflow.py review WORK/candidate-01/complete-manifest.json WORK/reviews.json
@@ -35,6 +35,8 @@ python scripts/run.py photo_workflow.py verify WORK/candidate-01/complete-manife
 ```
 
 修改候选图会使原检查失效，需要重新生成和重新看图；不能只换哈希继续勾选。出现原片模糊/遮挡/画幅外，保留待核对，不把 false 批量改为 true。
+
+同名图片可能存在于旧交付和多个重试目录。按核对模板的 `image_path` 打开当前候选，核对绝对路径和 `image_sha256`，不能看旧图后签新哈希。联系表用于筛查；疑似双尺或标签缺件必须直接看当前 PNG，并与原片同一坐标对照，不能凭缩略图或印刷残边判错。
 
 多照片任务文件示例（数量不限）：
 

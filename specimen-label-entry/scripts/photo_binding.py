@@ -13,7 +13,7 @@ def bind(records, manifests):
     for path in manifests:
         proof = json.loads(path.read_text())
         if proof.get('kind') != 'complete_specimen_photographs':
-            raise ValueError('Bind five-part complete photograph manifests')
+            raise ValueError('Bind visually reviewed complete photograph manifests')
         by_id = {g['specimen_number']: g for g in proof['plan']['groups']}
         for entry in proof['images']:
             sid = entry['specimen_number']

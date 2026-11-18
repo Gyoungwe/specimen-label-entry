@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 from complete_photos import (PARTS, TRANSPOSE, oriented_source, validate_group, build,
-                             record_reviews, verify)
+                             record_reviews, verify, known_rulers, validate_single_rulers)
 from photo_groups import open_source, digest
 from photo_binding import export_linked
 
@@ -31,7 +31,7 @@ def prepare(source, out, rotation=0, ids=()):
     plan = {'source_sha256': digest(source), 'exif_display_size': exif_size,
             'reading_rotation': rotation, 'oriented_size': list(image.size),
             'coordinate_space': 'oriented_native_pixels', 'expected_groups': len(ids),
-            'native_scale': None, 'groups': []}
+            'native_scale': None, 'groups': [], 'ruler_policy': 'single'}
     for sid in ids:
         plan['groups'].append({'specimen_number': sid, 'group_box': None,
             'parts': {key: None for key in ('catalogue', 'specimen', 'collection')},
@@ -81,11 +81,13 @@ def check(source, plan_path):
             if not group.get('parts', {}).get(role):
                 issues.append({'specimen_number': sid, 'code': 'MISSING_REGION', 'part': role})
         try:
-            validate_group(group, image, plan.get('native_scale'))
+            scale = validate_group(group, image, plan.get('native_scale'))
+            if plan.get('ruler_policy', 'single') == 'single':
+                validate_single_rulers(group, scale, known_rulers(plan))
         except (ValueError, KeyError, TypeError) as e:
             issues.append({'specimen_number': sid, 'code': 'SOURCE_REVIEW', 'detail': str(e)})
             continue
-        for box in group.get('cleanup', {}).get('exclude_boxes', []):
+        for box in (group.get('cleanup') or {}).get('exclude_boxes', []):
             pixels = np.asarray(image.crop(box).convert('L'))
             threshold = max(25, min(90, float(np.percentile(pixels, 70))-45))
             if np.count_nonzero(pixels < threshold) < 12:
@@ -127,8 +129,8 @@ def review_assets(manifest_path):
             path = out/(entry['specimen_number']+'__ruler-'+suffix+'.png')
             preview.convert('RGB').save(path); backgrounds.append(str(path.resolve()))
         rulers.append({'specimen_number': entry['specimen_number'], 'previews': backgrounds})
-    template = [{'specimen_number': e['specimen_number'], 'image_sha256': e['sha256'],
-                 'reviewer': '', 'note': '', **{role: False for role in PARTS}} for e in entries]
+    template = [{'specimen_number': e['specimen_number'], 'image_path': e['path'], 'image_sha256': e['sha256'],
+                 'reviewer': '', 'note': '', **{role: False for role in proof['required_parts']}} for e in entries]
     template_path = out/'reviews-template.json'
     if template_path.exists():
         raise ValueError('Review template already exists; retain previous inspection records')
@@ -137,7 +139,7 @@ def review_assets(manifest_path):
               'delivery_ready': False,
               'manifest': str(manifest_path.resolve()), 'contacts': contacts, 'rulers': rulers,
               'review_template': str(template_path.resolve()),
-              'next_action': 'View each candidate against its source, inspect ruler light/dark previews, then fill the five flags and reviewer/note; use review to record the checks'}
+              'next_action': 'View each candidate against its source, confirm complete subjects and exactly one ruler, then fill the declared flags and reviewer/note; use review to record the checks'}
     save_json(out/'review-index.json', result)
     return result
 

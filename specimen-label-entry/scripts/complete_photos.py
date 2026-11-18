@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and audit photographs with complete labels, specimen and both ruler views.
+"""Build and audit complete photographs with exactly one displayed ruler.
 
 Source coordinates are native pixels AFTER EXIF orientation and the declared
 reading rotation. Semantic completeness is a visual review, bound to image hashes;
@@ -21,6 +21,7 @@ from scale_overlay import extract_ink, extract_seeded_ink, blank_edge_samples, a
 from precision_masks import clean_background
 
 PARTS = ('catalogue', 'specimen', 'collection', 'native_scale', 'synthetic_scale')
+SINGLE_PARTS = ('catalogue', 'specimen', 'collection', 'scale')
 SOURCE_PARTS = PARTS[:-1]
 TRANSPOSE = {90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180,
              270: Image.Transpose.ROTATE_270}
@@ -39,6 +40,44 @@ def checked_box(value, size):
 def contains(outer, inner, margin=0):
     return (outer[0]+margin <= inner[0] and outer[1]+margin <= inner[1] and
             inner[2]+margin <= outer[2] and inner[3]+margin <= outer[3])
+
+
+def required_parts(plan):
+    policy = plan.get('ruler_policy', 'both')  # manifests before v3.8 replay unchanged
+    if policy not in ('single', 'both'):
+        raise ValueError('ruler_policy must be single or both (legacy replay)')
+    return SINGLE_PARTS if policy == 'single' else PARTS
+
+
+def known_rulers(plan):
+    scales = [plan.get('native_scale'), *(g.get('native_scale') for g in plan['groups'])]
+    return list({tuple(s['box']): s for s in scales if s}.values())
+
+
+def validate_single_rulers(group, scale, scales):
+    """A partial or second source ruler cannot accompany a synthetic one."""
+    outer = group['group_box']
+    for candidate in scales:
+        box = candidate['box']
+        overlap = [max(outer[0], box[0]), max(outer[1], box[1]),
+                   min(outer[2], box[2]), min(outer[3], box[3])]
+        if overlap[0] >= overlap[2] or overlap[1] >= overlap[3]:
+            continue
+        # A reviewed exclusion may remove a foreign ruler entirely. Protection
+        # checks in validate_group prevent removal of target papers/appendages.
+        removed = (group.get('cleanup') or {}).get('exclude_boxes', [])
+        if removed:
+            covered = np.zeros((overlap[3]-overlap[1], overlap[2]-overlap[0]), dtype=bool)
+            for b in removed:
+                x0,y0,x1,y1 = max(b[0],overlap[0]),max(b[1],overlap[1]),min(b[2],overlap[2]),min(b[3],overlap[3])
+                if x0 < x1 and y0 < y1:
+                    covered[y0-overlap[1]:y1-overlap[1], x0-overlap[0]:x1-overlap[0]] = True
+            if covered.all():
+                continue
+        if not contains(outer, box):
+            raise ValueError(f"{group['specimen_number']}: partial source ruler in crop; reframe or review its complete removal")
+        if box != scale['box']:
+            raise ValueError(f"{group['specimen_number']}: another native ruler is visible; reframe to retain exactly one")
 
 
 def oriented_source(source, plan):
@@ -67,6 +106,10 @@ def validate_group(group, image, shared_scale):
         box = checked_box(parts.get(role), image.size)
         if not contains(outer, box, margin=2):
             raise ValueError(f'{sid}: group crop clips or touches the reviewed {role} region; expand it')
+    for role, box in parts.items():
+        checked_box(box, image.size)
+        if not contains(outer, box, margin=2):
+            raise ValueError(f'{sid}: group crop clips additional protected region {role}')
     # A number string is not the whole number-label paper. The two paper roles
     # and the specimen (including appendages) are independently reviewed.
     scale = group.get('native_scale') or shared_scale
@@ -101,8 +144,8 @@ def validate_group(group, image, shared_scale):
     return scale
 
 
-def render(image, group, scale):
-    """Keep the continuous source group intact; add same-photo ruler evidence 1:1."""
+def render(image, group, scale, ruler_policy='both'):
+    """Retain legacy replay; new builds explicitly select the single-ruler policy."""
     outer = group['group_box']
     raw = image.crop(outer)
     base = raw
@@ -135,6 +178,36 @@ def render(image, group, scale):
         base, cleanup_proof = clean_background(raw, mask, mask['source_sha256'])
     native, ink, extraction = ruler_asset(image, scale)
     native_in_group = contains(outer, scale['box'])
+    if ruler_policy == 'single':
+        validate_single_rulers(group, scale, [scale])
+        native_output = None
+        ink_output = None
+        base_box = [0, 0, base.width, base.height]
+        if native_in_group:
+            result = base
+            native_output = [scale['box'][0]-outer[0], scale['box'][1]-outer[1],
+                             scale['box'][2]-outer[0], scale['box'][3]-outer[1]]
+            method = 'visible_in_continuous_source_group'
+        else:
+            protected = [[b[0]-outer[0], b[1]-outer[1], b[2]-outer[0], b[3]-outer[1]]
+                         for b in group['parts'].values()]
+            ink_output = quiet_position(base, ink, protected, margin=24)
+            if ink_output is not None:
+                result = apply_asset(base, ink, ink_output)
+            else:
+                result, base_box, strip = ruler_footer(base, ink.width, ink.height, 32)
+                ink_output = [strip[2]-ink.width, strip[1], strip[2], strip[1]+ink.height]
+                result = apply_asset(result, ink, ink_output)
+            method = 'separate_evidence_asset_only'
+        return raw, result, native, ink, {
+            'base_box': base_box, 'native_scale_box': native_output,
+            'native_scale_method': method, 'synthetic_scale_box': ink_output,
+            'ruler_policy': 'single', 'displayed_scale_count': 1,
+            'displayed_scale_kind': 'native' if native_in_group else 'synthetic',
+            'scale_factor': 1, 'ink_extraction': extraction, 'cleanup': cleanup_proof,
+            'processing': 'integer crop/rotation; one visible ruler; unused ruler assets retained separately'}
+    if ruler_policy != 'both':
+        raise ValueError('Unknown ruler policy')
     margin = 32
     # Always include a synthetic ruler, even when the original is already visible.
     # A distant shared ruler is also shown as its FULL paper crop, not ink alone.
@@ -297,23 +370,28 @@ def build(source, plan_path, out):
     if out.exists():
         raise ValueError('Use a fresh staging directory; retain previous deliveries')
     plan = json.loads(plan_path.read_text())
+    plan.setdefault('ruler_policy', 'single')
+    roles = required_parts(plan)
     image, orientation = oriented_source(source, plan)
     groups = plan.get('groups', [])
     ids = [g.get('specimen_number') for g in groups]
     if not groups or len(set(ids)) != len(ids) or plan.get('expected_groups') != len(ids):
         raise ValueError('Cover the actual unique ID inventory exactly once, regardless of specimen count')
     scales = [validate_group(g, image, plan.get('native_scale')) for g in groups]
+    if plan['ruler_policy'] == 'single':
+        for group, scale in zip(groups, scales):
+            validate_single_rulers(group, scale, known_rulers(plan))
     (out/'raw').mkdir(parents=True)
     (out/'images').mkdir()
     (out/'scales').mkdir()
     proof = {'schema_version': 1, 'kind': 'complete_specimen_photographs',
              'source': str(source.resolve()), 'source_sha256': digest(source),
              'exif_orientation': orientation, 'plan': deepcopy(plan),
-             'required_parts': list(PARTS), 'images': [],
+             'required_parts': list(roles), 'images': [],
              'human_review_pending': True}
     for group, scale in zip(groups, scales):
         sid = group['specimen_number']
-        raw, final, native, ink, composition = render(image, group, scale)
+        raw, final, native, ink, composition = render(image, group, scale, plan['ruler_policy'])
         raw_path = out/'raw'/(sid+'.png')
         image_path = out/'images'/(sid+'.png')
         native_path = out/'scales'/(sid+'__native.png')
@@ -338,9 +416,10 @@ def same_pixels(path, expected):
 
 def verify(path, require_review=True):
     proof = json.loads(path.read_text())
+    roles = required_parts(proof['plan'])
     if (proof.get('kind') != 'complete_specimen_photographs' or proof.get('schema_version') != 1 or
-            proof.get('required_parts') != list(PARTS)):
-        raise ValueError('Expected the five-part photograph completeness manifest')
+            proof.get('required_parts') != list(roles)):
+        raise ValueError('Expected the photograph completeness manifest with the declared ruler policy')
     source = Path(proof['source'])
     image, orientation = oriented_source(source, proof['plan'])
     if proof['source_sha256'] != digest(source) or proof['exif_orientation'] != orientation:
@@ -352,7 +431,9 @@ def verify(path, require_review=True):
         raise ValueError('Completeness manifest has missing, duplicate or mispaired IDs')
     for group, entry in zip(groups, entries):
         scale = validate_group(group, image, proof['plan'].get('native_scale'))
-        raw, final, native, ink, composition = render(image, group, scale)
+        if proof['plan'].get('ruler_policy') == 'single':
+            validate_single_rulers(group, scale, known_rulers(proof['plan']))
+        raw, final, native, ink, composition = render(image, group, scale, proof['plan'].get('ruler_policy', 'both'))
         for name, expected in (('raw_path', raw), ('path', final), ('native_scale_path', native), ('ink_path', ink)):
             if not same_pixels(Path(entry[name]), expected):
                 raise ValueError(f"{entry['specimen_number']}: {name} differs from replayed source pixels")
@@ -360,17 +441,23 @@ def verify(path, require_review=True):
             raise ValueError('Ruler placement, geometry or image hash differs')
         if require_review:
             check_final_review(entry.get('final_review'), entry)
-    return {'verified_images': len(entries), 'required_parts': list(PARTS),
+    return {'verified_images': len(entries), 'required_parts': list(roles),
             'visual_completeness_reviewed': require_review, 'scale_factor': 1,
             'human_review_pending': True}
 
 
 def check_final_review(review, entry):
+    single = entry.get('composition', {}).get('ruler_policy') == 'single'
+    roles = SINGLE_PARTS if single else PARTS
+    if isinstance(review, dict) and review.get('image_path') is not None:
+        if Path(review['image_path']).resolve() != Path(entry['path']).resolve():
+            raise ValueError('Final review points to a different image path; open the current candidate')
     if (not isinstance(review, dict) or review.get('image_sha256') != entry['sha256'] or
-            any(review.get(role) is not True for role in PARTS) or
+            any(review.get(role) is not True for role in roles) or
             not isinstance(review.get('reviewer'), str) or not review['reviewer'].strip() or
             not isinstance(review.get('note'), str) or not review['note'].strip()):
-        raise ValueError(f"{entry['specimen_number']}: final visual review must confirm all five complete parts and bind the image hash")
+        label = 'all four complete parts with exactly one ruler' if single else 'all five complete parts'
+        raise ValueError(f"{entry['specimen_number']}: final visual review must confirm {label} and bind the image hash")
 
 
 def record_reviews(manifest, reviews):
